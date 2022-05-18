@@ -71,7 +71,7 @@ class Monitor(object):
         while True:
             msg = queue.get()
             msg = "完成率: " + str(msg)
-            token="https://oapi.dingtalk.com/robot/send?access_token=fe952b2e2fd10b7637d864d5d9b1d75f83949c776ce32681b4bdc2d88fcbf8cb"  #这里替换为你刚才复制的内容
+            token="https://oapi.dingtalk.com/robot/send?="
             headers={'Content-Type':'application/json'}
             data={"msgtype":"text","text":{ "content": msg}}
             requests.post(token,data=json.dumps(data),headers=headers)
