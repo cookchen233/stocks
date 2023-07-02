@@ -15,15 +15,18 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
-def retry_decorator(func):
+def say(msg):
+    subprocess.call(["python3", os.path.abspath(os.path.dirname(__file__)) + "/speak.py", msg])
+
+def retry_decorator(func, sleep_time = 1):
     def wrapper(*arg, **kw):
         def try_func(try_times = 1):
             try:
                 return func(*arg, **kw)
-            except requests.ConnectionError:
+            except Exception as e:
                 if try_times >= 3:
-                    raise
-                time.sleep(1)
+                    raise e
+                time.sleep(sleep_time)
                 return try_func(try_times + 1)
         return try_func()
     return wrapper

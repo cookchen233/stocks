@@ -102,10 +102,11 @@ class BaoStockImport(object):
             # "2020-06-30",
             # "2020-09-30",
             # "2020-12-31",
-            # "2021-03-30",
+            "2021-03-31",
             "2021-06-30",
             "2021-09-30",
             "2021-12-31",
+            "2022-03-31",
         ]
         for d in dates:
             with DataBase() as db:
@@ -210,11 +211,9 @@ class BaoStockImport(object):
 
 
 if __name__ == '__main__':
-    BaoStockImport().save_ssf_stocks_from_east_money()
-    BaoStockImport().update_ssf_stocks()
-    BaoStockImport().get_ssf_stock_statistics("2021-06-30")
-    BaoStockImport().get_ssf_stock_statistics("2021-09-30")
-    BaoStockImport().get_ssf_stock_statistics("2021-12-31")
+    #BaoStockImport().save_ssf_stocks_from_east_money()
+    #BaoStockImport().update_ssf_stocks()
+    BaoStockImport().get_ssf_stock_statistics("2021-03-31")
 
 
 

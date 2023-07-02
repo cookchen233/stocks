@@ -141,7 +141,7 @@ class Monitor(object):
         }
 
     def __get_live_data(self, code):
-        code = f"1.{code}" if code.startswith('60') or code.startswith('900') or code.startswith('11') else f"0.{code}"
+        code = f"1.{code}" if code.startswith('60') or code.startswith('900') or code.startswith('11') or code.startswith('688') else f"0.{code}"
         url = "https://push2.eastmoney.com/api/qt/stock/get"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36",
@@ -158,6 +158,8 @@ class Monitor(object):
         }
         r = self.session.get(url, params=params, headers=headers)
         data = json.loads(r.text)["data"]
+        # if not data:
+        #     print(code)
         return {
             "code": data["f57"],
             "name": data["f58"],
@@ -200,7 +202,7 @@ class Monitor(object):
             if msg != "":
                 if is_notify:
                     record_key = notify_code + ", low"
-                    if not self.is_recorded(record_key, 3600):
+                    if not self.is_recorded(record_key, 1800):
                         self.dingding(record_key)
                         self.log(stock["名称"] + msg)
                         self.say(stock["名称"] + msg)
@@ -284,7 +286,7 @@ class Monitor(object):
             msg = ""
             if stock["涨跌幅"] < -7:
                 msg = "暴跌" + str(stock["涨跌幅"])
-            elif stock["涨跌幅"] > 7:
+            elif stock["涨跌幅"] > 2:
                 msg = "暴涨" + str(stock["涨跌幅"])
             elif (stock["压力"] - stock["现价"])/stock["现价"]*100 <= 1:
                 msg = "触及压力位"
@@ -308,7 +310,7 @@ class Monitor(object):
                     self.say(stock["名称"] + msg)
                     self.set_record_time(record_key)
 
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/data/buying_code_list.txt")
+        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/buying_code_list.txt")
         for code in code_list:
             __scan_buying_data(code)
             time.sleep(0.2)
@@ -364,13 +366,14 @@ class Monitor(object):
     last_pct_chg = {}
     last_volume = {}
     volume_diff_list = {}
-    def __scan_up_stock(self, code, down_pct_dff = -2, up_pct_diff = 2, min_volume_diff = 2000, min_lots_diff = 2000, min_lots = 50000):
+    def __scan_up_stock(self, code, down_pct_dff = -1, up_pct_diff = 1, min_volume_diff = 5000000, min_lots_diff = 2000, min_lots = 20000, up_pct = 8, down_pct = 0):
         try:
-            code = code.strip()[:6]
             if not code or len(code)<6 or not code[0].isdigit():
+                print("x")
                 return
 
             data = self.__get_live_data(code)
+            name = data["name"][0:2]
 
             #print(data["name"])
             c = code[::-1]
@@ -380,103 +383,125 @@ class Monitor(object):
             if data["buy1_lots"] == 0 and data["sell1_lots"] == 0:
                 return
 
-            if data["volume"]*100*data["close"] < 50000000:
-                return
+            #if data["volume"]*100*data["close"] < 50000000:
+            #    return
 
             if code not in self.last_volume:
                 self.__set_last_data(code, data)
 
-            limit_up_pct = 0.1 if code.startswith('60') or code.startswith('90') or code.startswith('00') else 0.2
+            limit_up_pct = 0.05 if "st" in name.lower() else (0.1 if code.startswith('60') or code.startswith('90') or code.startswith('00') else 0.2)
 
             #跌停
-            if data["close"] <= round(data["pre_close"]*(1 - limit_up_pct), 2):
-                #封单极少
+            if data["buy1_lots"] == 0 and data["close"] <= round(data["pre_close"]*(1 - limit_up_pct), 2):
+                #压单极少
                 record_key = notify_code + ", ready_up"
                 if not self.is_recorded(record_key, 10) and data["sell1_lots"] < min_lots:
-                    lots = str(data["sell1_lots"])[0] + "0"*(len(str(data["sell1_lots"]))-1)
-                    self.dingding(record_key)
-                    self.log(data["name"] + f"压单仅剩{lots}")
-                    self.say(data["name"] + f"压单仅剩{lots}")
+                    lots = int(data["sell1_lots"]/10000)*10000
+                    #self.dingding(record_key)
+                    self.log(name + f"仅剩{lots}")
+                    self.say(name + f"仅剩{lots}")
                     self.set_record_time(record_key)
 
-                #封单大幅减少
+                #压单大幅减少
                 record_key = notify_code + ", going_up"
                 lots_diff = int((self.last_sell1_lots[code] - data["sell1_lots"])/1000)*1000
-                if not self.is_recorded(record_key, 5) and data["sell1_lots"] < 200000 and lots_diff > min_lots_diff:
-                    self.dingding(record_key)
-                    lots = str(data["sell1_lots"])[0] + "0"*(len(str(data["sell1_lots"]))-1)
-                    self.log(data["name"] + f"压单减少{lots_diff}, 现存{lots}")
-                    self.say(data["name"] + f"压单减少{lots_diff}, 现存{lots}")
+                if not self.is_recorded(record_key, 2) and ((data["sell1_lots"] < 200000 and lots_diff > min_lots_diff) or data["sell1_lots"] > 500000 and lots_diff > min_lots_diff*2):
+                    #self.dingding(record_key)
+                    lots = int(data["sell1_lots"]/10000)*10000
+                    self.log(name + f"减{lots_diff}, 剩{lots}")
+                    self.say(name + f"减{lots_diff}, 剩{lots}")
                     self.set_record_time(record_key)
             #涨停
-            elif data["close"] >= round(data["pre_close"]*(1 + limit_up_pct), 2):
+            elif data["sell1_lots"] == 0 and data["close"] >= round(data["pre_close"]*(1 + limit_up_pct), 2):
                 #封单极少
-                record_key = notify_code + ", ready"
+                record_key = notify_code + ", ready_down"
                 if not self.is_recorded(record_key, 10) and data["buy1_lots"] < min_lots:
-                    lots = str(data["buy1_lots"])[0] + "0"*(len(str(data["buy1_lots"]))-1)
-                    self.dingding(record_key)
-                    self.log(data["name"] + f"封单仅剩{lots}")
-                    self.say(data["name"] + f"封单仅剩{lots}")
+                    lots = int(data["buy1_lots"]/10000)*10000
+                    #self.dingding(record_key)
+                    self.log(name + f"仅剩{lots}")
+                    self.say(name + f"仅剩{lots}")
                     self.set_record_time(record_key)
 
                 #封单大幅减少
-                record_key = notify_code + ", going"
+                record_key = notify_code + ", going_down"
                 lots_diff = int((self.last_buy1_lots[code] - data["buy1_lots"])/1000)*1000
-                if not self.is_recorded(record_key, 5) and data["buy1_lots"] < 200000 and lots_diff > min_lots_diff:
-                    self.dingding(record_key)
-                    lots = str(data["buy1_lots"])[0] + "0"*(len(str(data["buy1_lots"]))-1)
-                    self.log(data["name"] + f"封单减少{lots_diff}, 现存{lots}")
-                    self.say(data["name"] + f"封单减少{lots_diff}, 现存{lots}")
+                if not self.is_recorded(record_key, 2) and (data["buy1_lots"] < 200000 and lots_diff > min_lots_diff):
+                    #self.dingding(record_key)
+                    lots = int(data["buy1_lots"]/10000)*10000
+                    self.log(name + f"减{lots_diff}, 剩{lots}")
+                    self.say(name + f"减{lots_diff}, 剩{lots}")
                     self.set_record_time(record_key)
             else:
-                #成交量激增
-                record_key = notify_code + ", v_up"
-                avp_volume = sum(map(float, self.volume_diff_list[code]))/len(self.volume_diff_list[code])
-                volume_diff = data["volume"] - self.last_volume[code]
-                if not self.is_recorded(record_key, 5) and volume_diff > avp_volume * 4 and volume_diff > min_volume_diff:
-                    #self.dingding(record_key)
-                    vd = str(volume_diff)[0] + "0"*(len(str(volume_diff))-1)
-                    #self.log(data["name"] + f"成交激增{vd}")
-                    #self.say(data["name"] + f"成交激增{vd}")
-                    self.set_record_time(record_key)
-
-
-                record_key = notify_code + ", up_down"
                 pct_chg_diff = round(data["pct_chg"] - self.last_pct_chg[code], 1)
-
                 #快速拉升
-                if not self.is_recorded(record_key, 5) and pct_chg_diff > up_pct_diff:
-                    self.dingding(record_key)
-                    self.log(data["name"] + f"急拉{pct_chg_diff}%")
-                    self.say(data["name"] + f"急拉{pct_chg_diff}%")
-                    self.set_record_time(record_key)
+                # if pct_chg_diff > up_pct_diff:
+                #     record_key = notify_code + ", fast_up"
+                #     if not self.is_recorded(record_key, 5):
+                #         self.dingding(record_key)
+                #         self.log(name + f"急拉{pct_chg_diff}")
+                #         self.say(name + f"急拉{pct_chg_diff}")
+                #         self.set_record_time(record_key)
                 #快速打压
-                elif not self.is_recorded(record_key, 5) and pct_chg_diff < down_pct_dff:
-                    self.dingding(record_key)
-                    self.log(data["name"] + f"猛砸{pct_chg_diff}%")
-                    self.say(data["name"] + f"猛砸{pct_chg_diff}%")
-                    self.set_record_time(record_key)
+                # elif pct_chg_diff < down_pct_dff:
+                #     if not self.is_recorded(record_key, 5):
+                #         record_key = notify_code + ", fast_down"
+                #         self.dingding(record_key)
+                #         self.log(name + f"猛砸{pct_chg_diff}")
+                #         self.say(name + f"猛砸{pct_chg_diff}")
+                #         self.set_record_time(record_key)
 
                 #撬板
                 if data["low"] <= round(data["pre_close"]*(1 - limit_up_pct), 2) and data["close"] > data["low"]:
                     record_key = notify_code + ", has_up"
                     if not self.is_recorded(record_key, 600):
-                        self.dingding(record_key)
-                        self.log(data["name"] + "撬板")
-                        self.say(data["name"] + "撬板")
+                        #self.dingding(record_key)
+                        self.log(name + "撬板")
+                        self.say(name + "撬板")
                         self.set_record_time(record_key)
 
                 #炸板
                 if data["high"] >= round(data["pre_close"]*(1 + limit_up_pct), 2) and data["close"] < data["high"]:
-                    record_key = notify_code + ", has"
+                    record_key = notify_code + ", has_down"
                     if not self.is_recorded(record_key, 600):
-                        self.log(data["name"] + "炸板")
-                        self.say(data["name"] + "炸板")
+                        #self.dingding(record_key)
+                        self.log(name + "炸板")
+                        self.say(name + "炸板")
                         self.set_record_time(record_key)
 
-            if not self.is_recorded(code, 5):
-                self.__set_last_data(code, data)
-                self.set_record_time(code)
+                pct_chg = round(data["pct_chg"], 1)
+                #大涨
+                if up_pct != 0 and pct_chg > up_pct:
+                    record_key = notify_code + ", out_up"
+                    if not self.is_recorded(record_key, 3600):
+                        self.dingding(record_key)
+                        self.log(name + f"暴涨{pct_chg}")
+                        self.say(name + f"暴涨{pct_chg}")
+                        self.set_record_time(record_key)
+                #大跌
+                elif down_pct != 0 and pct_chg < down_pct:
+                    record_key = notify_code + ", out_down"
+                    if not self.is_recorded(record_key, 3600):
+                        self.dingding(record_key)
+                        self.log(name + f"暴跌{pct_chg}")
+                        self.say(name + f"暴跌{pct_chg}")
+                        self.set_record_time(record_key)
+
+            #成交量激增
+            record_key = notify_code + ", v_up"
+            avp_volume = sum(map(float, self.volume_diff_list[code]))/len(self.volume_diff_list[code])
+            volume_diff = data["volume"] - self.last_volume[code]
+            #if not self.is_recorded(record_key, 5) and volume_diff > avp_volume * 4 and volume_diff > min_volume_diff:
+            if not self.is_recorded(record_key, 5) and volume_diff*data["close"]*100 > min_volume_diff:
+                #self.dingding(record_key)
+                vd = str(volume_diff)[0] + "0"*(len(str(volume_diff))-1)
+                self.log(name + f"成交{vd}")
+                self.say(name + f"成交{vd}")
+                self.set_record_time(record_key)
+
+            #if not self.is_recorded(code, 5):
+            #    self.__set_last_data(code, data)
+            #    self.set_record_time(code)
+            self.__set_last_data(code, data)
         except Exception as e:
             err_log()
             core.say("子线程发生错误" + code)
@@ -509,7 +534,7 @@ class Monitor(object):
         return list(set(code_list))
 
     def scan_up_stock(self):
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/data/up_code_list.txt")
+        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/up_code_list.txt")
         if len(code_list) > 0:
             pool = ThreadPoolExecutor(min(40, len(code_list)))
             for code in code_list:
@@ -517,17 +542,55 @@ class Monitor(object):
             pool.shutdown()
 
     def scan_bond(self):
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/data/bond_code_list.txt")
+        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/bond_code_list.txt")
         if len(code_list) > 0:
             pool = ThreadPoolExecutor(min(40, len(code_list)))
             for code in code_list:
                 pool.submit(self.__scan_up_stock, code, down_pct_dff = -0.5, up_pct_diff = 0.5, min_volume_diff = 500)
             pool.shutdown()
 
+    def scan_weight_stock(self):
+        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/weight_code_list.txt")
+        if len(code_list) > 0:
+            pool = ThreadPoolExecutor(min(40, len(code_list)))
+            for code in code_list:
+                pool.submit(self.__scan_up_stock, code, up_pct = 1, down_pct = -1)
+            pool.shutdown()
+
+    def report_market(self):
+        now = datetime.datetime.now()
+        #now = datetime.datetime.strptime(str(now.date()) + " 09:45", "%Y-%m-%d %H:%M")
+        today_date = str(now.date())
+        ta = datetime.datetime.strptime(today_date + " 09:25", "%Y-%m-%d %H:%M")
+        tb = datetime.datetime.strptime(today_date + " 09:40", "%Y-%m-%d %H:%M")
+        tc = datetime.datetime.strptime(today_date + " 10:30", "%Y-%m-%d %H:%M")
+        record_key = "report_market"
+        if now > tc and not self.is_recorded(record_key + "up1030", 43200):
+            record_key  = record_key + "up1030"
+        elif now > tb and not self.is_recorded(record_key + "up0940", 43200):
+            record_key  = record_key + "up0940"
+        elif now > ta and not self.is_recorded(record_key + "up0925", 43200):
+            record_key  = record_key + "up0925"
+
+        if record_key != "report_market":
+            df = ak.stock_zt_pool_em(now.strftime("%Y%m%d"))
+            df = df[df.apply(lambda x:x["代码"].find("300") != 0 and x["代码"].find("688") != 0 and x["名称"].find("退") == -1 and x["名称"].lower().find("st") == -1, axis=1)]
+            ranks = [str(row) for row in df["所属行业"].value_counts()[0:5].items()]
+            self.say("当前涨停数", str(df.index.size), ".", str.join("..", ranks))
+            self.set_record_time(record_key)
+
+        record_key = "report_market"
+        if now > ta and not self.is_recorded(record_key + "down0925", 43200):
+            df = ak.stock_zt_pool_dtgc_em(now.strftime("%Y%m%d"))
+            df = df[df.apply(lambda x:x["代码"].find("300") != 0 and x["代码"].find("688") != 0 and x["名称"].find("退") == -1 and x["名称"].lower().find("st") == -1, axis=1)]
+            ranks = [row["名称"] for i, row in df.iterrows()]
+            self.say("跌停数", str(df.index.size), str.join(".", ranks))
+            self.set_record_time(record_key + "down0925")
+
 
 parser = argparse.ArgumentParser(description='股票监控')
-# parser.add_argument('--project', '-p', help='项目值, 可选值:\n ban:打板监控, all:全部. 默认为全部', default="all", choices=["all", "ban"])
-parser.add_argument('project', help='项目值, 可选值:\n up:打板监控, bond:可转债, buying:准备买入的股票, etf:etf基金. 默认为etf', default="etf", choices=["etf", "up", "bond", "buying"])
+# parser.add_argument('--project', '-p', help='项目值, 可选值:\n up:打板监控, all:全部. 默认为全部', default="all", choices=["all", "ban"])
+parser.add_argument('project', help='项目值, 可选值:\n up:打板监控, weight:风向股, bond:可转债, buying:准备买入的股票, etf:etf基金, report:行情实时播报. 默认为etf', default="etf", choices=["etf", "up", "weight", "bond", "buying", "report"])
 parser.add_argument('is_dev', help='是否为调试模式, 可选值:\n 0:否, 1:是. 默认为0', default=0,  type = int, choices=[0, 1])
 args = parser.parse_args()
 if __name__ == '__main__':
@@ -539,21 +602,26 @@ if __name__ == '__main__':
     is_dev = args.is_dev
     core = Monitor()
     while True:
-        today_date = str(datetime.datetime.now().date())
+        now = datetime.datetime.now()
+        today_date = str(now.date())
         begin = datetime.datetime.strptime(today_date + " 09:30", "%Y-%m-%d %H:%M")
         end = datetime.datetime.strptime(today_date + " 11:30", "%Y-%m-%d %H:%M")
         begin2 = datetime.datetime.strptime(today_date + " 13:00", "%Y-%m-%d %H:%M")
         end2 = datetime.datetime.strptime(today_date + " 14:56", "%Y-%m-%d %H:%M")
-        if is_dev == 1 or (datetime.datetime.now().weekday() in range(0, 5) and (begin <= datetime.datetime.now() <= end or begin2 <= datetime.datetime.now() <= end2)):
+        if is_dev == 1 or (now.weekday() in range(0, 5) and (begin <= now <= end or begin2 <= now <= end2)):
             try:
                 if args.project == "etf":
                     core.scan_etf()
                 elif args.project == "up":
                     core.scan_up_stock()
+                elif args.project == "weight":
+                    core.scan_weight_stock()
                 elif args.project == "bond":
                     core.scan_bond()
                 elif args.project == "buying":
                     core.scan_buying()
+                elif args.project == "report":
+                    core.report_market()
             except Exception:
                 err_log()
                 core.say("发生错误")
