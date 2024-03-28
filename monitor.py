@@ -566,11 +566,7 @@ class Monitor(object):
 
         self.last_buy1_lots[code] = data["buy1_lots"]
         self.last_sell1_lots[code] = data["sell1_lots"]
-
-        record_key = code+", last_volume"
-        if not self.is_recorded(record_key, 10):
-            self.last_volume[code] = data["volume"]
-            self.set_record_time(record_key)
+        self.last_volume[code] = data["volume"]
 
         record_key = code + ", pct_chg"
         if not self.is_recorded(record_key, 10):
@@ -732,4 +728,4 @@ if __name__ == '__main__':
                 err_log()
                 core.say("发生错误")
                 core.dingding("发生错误")
-        time.sleep(0.2)
+        time.sleep(0.1)
