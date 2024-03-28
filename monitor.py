@@ -28,6 +28,7 @@ from PIL import ImageGrab
 
 import akshare as ak
 import counter
+from openpyxl import load_workbook
 
 
 class Monitor(object):
@@ -36,7 +37,7 @@ class Monitor(object):
     tts = None
     session = None
     notify_queues = None
-
+    stock_static_info = {}
 
     def __init__(self):
         self.notify_queues = {
@@ -141,7 +142,7 @@ class Monitor(object):
         }
 
     def __get_live_data(self, code):
-        code = f"1.{code}" if code.startswith('60') or code.startswith('900') or code.startswith('11') or code.startswith('688') else f"0.{code}"
+        secid = f"1.{code}" if code.startswith('60') or code.startswith('900') or code.startswith('11') or code.startswith('688') else f"0.{code}"
         url = "https://push2.eastmoney.com/api/qt/stock/get"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36",
@@ -150,16 +151,21 @@ class Monitor(object):
             "fltt": "2",
             "invt": "2",
             "klt": "1",
-            "secid": code,
-            "fields": "f57,f58,f60,f43,f44,f45,f47,f170,f19,f20,f39,f40,f530",
+            "secid": secid,
+            "fields": "f57,f58,f60,f43,f44,f45,f47,f170,f19,f20,f39,f40,f530,f168",
             "ut": "b2884a393a59ad64002292a3e90d46a5",
             # "cb": "jQuery183003743205523325188_1589197499471",
             "_": int(time.time() * 1000),
         }
         r = self.session.get(url, params=params, headers=headers)
         data = json.loads(r.text)["data"]
-        # if not data:
-        #     print(code)
+        if not data:
+            print(code)
+        turnover=float(data["f168"]) if data["f168"] != "-" else to_decimal(data["f168"])
+        static_info = self.__get_stock_static_info(code)
+        if static_info:
+            turnover=turnover * static_info["比"]
+
         return {
             "code": data["f57"],
             "name": data["f58"],
@@ -171,7 +177,26 @@ class Monitor(object):
             "buy1_lots": int(data["f20"]) if data["f20"] != "-" else 0,
             "sell1_lots": int(data["f40"]) if data["f40"] != "-" else 0,
             "volume": int(data["f47"]) if data["f47"] != "-" else 0,
+            "turnover": turnover,
         }
+
+    def __get_stock_static_info(self, code):
+        if code in self.stock_static_info:
+            return self.stock_static_info[code]
+
+        script_directory = os.path.dirname(os.path.realpath(__file__))
+        filename = os.path.join(script_directory, "conf/stock_static_info.xlsx")
+        df = pd.read_excel(filename)
+
+        # 查找某一列为特定值的数据
+        column_name = "代码"  # 列名
+        search_value = int(code)  # 要查找的值
+        filtered_data = df[df[column_name] == search_value]
+        data=pd.DataFrame(filtered_data).to_dict(orient='records')
+        if data:
+            self.stock_static_info[code]=data[0]
+            return self.stock_static_info[code]
+        return None
 
     def __symbol_code(self, code):
         return f"sh{code}" if code.startswith('60') or code.startswith('900') or code.startswith('11') or code.startswith('5') else f"sz{code}"
@@ -352,21 +377,29 @@ class Monitor(object):
             pct_chg = round(sum([ v["percent"]*decimal.Decimal(v["pct_chg"]) for v in stock_list]), 4)
             if pct_chg > 3 or pct_chg < -3:
                 record_time = self.get_record_time(group_code)
-                if datetime.datetime.now() < datetime.datetime.strptime(str(datetime.datetime.now().date()) + " 10:10", "%Y-%m-%d %H:%M"):
+                if datetime.datetime.now() < datetime.datetime.strptime(str(datetime.datetime.now().date()) + " 10:10",
+                                                                        "%Y-%m-%d %H:%M"):
                     if (datetime.datetime.now() - record_time).total_seconds() >= 60:
                         pass
-                        #self.dingding("{} {}".format(group_code, pct_chg), group_code)
+                        # self.dingding("{} {}".format(group_code, pct_chg), group_code)
                 else:
                     if (datetime.datetime.now() - record_time).total_seconds() >= 600:
                         pass
-                        #self.dingding("{} {}".format(group_code, pct_chg), group_code)
+                        # self.dingding("{} {}".format(group_code, pct_chg), group_code)
 
     last_buy1_lots = {}
     last_sell1_lots = {}
     last_pct_chg = {}
     last_volume = {}
     volume_diff_list = {}
-    def __scan_up_stock(self, code, down_pct_dff = -1, up_pct_diff = 1, min_volume_diff = 5000000, min_lots_diff = 2000, min_lots = 20000, up_pct = 8, down_pct = 0):
+
+    def __format_lots(self, lots):
+        if lots > 20000:
+            return int(lots/10000)*10000
+        return int(lots/1000)*1000
+
+    def __scan_up_stock(self, code, down_pct_dff=-2, up_pct_diff=1.5, min_amount_diff=5000000, min_lots_diff=1000,
+                        min_lots=20000, up_pct=7, down_pct=-7):
         try:
             if not code or len(code)<6 or not code[0].isdigit():
                 print("x")
@@ -375,15 +408,15 @@ class Monitor(object):
             data = self.__get_live_data(code)
             name = data["name"][0:2]
 
-            #print(data["name"])
+            # print(data["name"])
             c = code[::-1]
             notify_code = "0." + c[0:3] + c[3:]
 
-            #停牌
+            # 停牌
             if data["buy1_lots"] == 0 and data["sell1_lots"] == 0:
                 return
 
-            #if data["volume"]*100*data["close"] < 50000000:
+            # if data["volume"]*100*data["close"] < 50000000:
             #    return
 
             if code not in self.last_volume:
@@ -391,57 +424,61 @@ class Monitor(object):
 
             limit_up_pct = 0.05 if "st" in name.lower() else (0.1 if code.startswith('60') or code.startswith('90') or code.startswith('00') else 0.2)
 
-            #跌停
+            # 跌停
             if data["buy1_lots"] == 0 and data["close"] <= round(data["pre_close"]*(1 - limit_up_pct), 2):
-                #压单极少
+                # 压单极少
                 record_key = notify_code + ", ready_up"
                 if not self.is_recorded(record_key, 10) and data["sell1_lots"] < min_lots:
-                    lots = int(data["sell1_lots"]/10000)*10000
-                    #self.dingding(record_key)
+                    lots = self.__format_lots(data["sell1_lots"])
+                    # self.dingding(record_key)
                     self.log(name + f"仅剩{lots}")
                     self.say(name + f"仅剩{lots}")
                     self.set_record_time(record_key)
 
-                #压单大幅减少
+                # 压单大幅减少
                 record_key = notify_code + ", going_up"
-                lots_diff = int((self.last_sell1_lots[code] - data["sell1_lots"])/1000)*1000
-                if not self.is_recorded(record_key, 2) and ((data["sell1_lots"] < 200000 and lots_diff > min_lots_diff) or data["sell1_lots"] > 500000 and lots_diff > min_lots_diff*2):
-                    #self.dingding(record_key)
-                    lots = int(data["sell1_lots"]/10000)*10000
+                lots_diff = self.last_sell1_lots[code] - data["sell1_lots"]
+                if not self.is_recorded(record_key, 2) and ((data["sell1_lots"] < 200000 and lots_diff > min_lots_diff)
+                                                            or data["sell1_lots"] > 500000 and lots_diff > min_lots_diff * 2):
+                    # self.dingding(record_key)
+                    lots = self.__format_lots(data["sell1_lots"])
+                    lots_diff = self.__format_lots(lots_diff)
                     self.log(name + f"减{lots_diff}, 剩{lots}")
                     self.say(name + f"减{lots_diff}, 剩{lots}")
                     self.set_record_time(record_key)
-            #涨停
+            # 涨停
             elif data["sell1_lots"] == 0 and data["close"] >= round(data["pre_close"]*(1 + limit_up_pct), 2):
-                #封单极少
+                # 封单极少
                 record_key = notify_code + ", ready_down"
                 if not self.is_recorded(record_key, 10) and data["buy1_lots"] < min_lots:
-                    lots = int(data["buy1_lots"]/10000)*10000
-                    #self.dingding(record_key)
+                    lots = self.__format_lots(data["buy1_lots"])
+                    # self.dingding(record_key)
                     self.log(name + f"仅剩{lots}")
                     self.say(name + f"仅剩{lots}")
                     self.set_record_time(record_key)
 
-                #封单大幅减少
+                # 封单大幅减少
                 record_key = notify_code + ", going_down"
                 lots_diff = int((self.last_buy1_lots[code] - data["buy1_lots"])/1000)*1000
                 if not self.is_recorded(record_key, 2) and (data["buy1_lots"] < 200000 and lots_diff > min_lots_diff):
-                    #self.dingding(record_key)
-                    lots = int(data["buy1_lots"]/10000)*10000
+                    # self.dingding(record_key)
+                    lots = self.__format_lots(data["buy1_lots"])
+                    lots_diff = self.__format_lots(lots_diff)
                     self.log(name + f"减{lots_diff}, 剩{lots}")
                     self.say(name + f"减{lots_diff}, 剩{lots}")
                     self.set_record_time(record_key)
             else:
                 pct_chg_diff = round(data["pct_chg"] - self.last_pct_chg[code], 1)
-                #快速拉升
-                # if pct_chg_diff > up_pct_diff:
-                #     record_key = notify_code + ", fast_up"
-                #     if not self.is_recorded(record_key, 5):
-                #         self.dingding(record_key)
-                #         self.log(name + f"急拉{pct_chg_diff}")
-                #         self.say(name + f"急拉{pct_chg_diff}")
-                #         self.set_record_time(record_key)
-                #快速打压
+                pct_chg = round(data["pct_chg"], 1)
+                # 快速拉升
+                if up_pct != 0 and pct_chg >= up_pct and pct_chg_diff > up_pct_diff:
+                    record_key = notify_code + ", fast_up"
+                    if not self.is_recorded(record_key, 5):
+                        self.dingding(record_key)
+                        self.log(name + f"急拉{pct_chg_diff}")
+                        self.say(name + f"急拉{pct_chg_diff}")
+                        self.set_record_time(record_key)
+                # # 快速打压
                 # elif pct_chg_diff < down_pct_dff:
                 #     if not self.is_recorded(record_key, 5):
                 #         record_key = notify_code + ", fast_down"
@@ -450,78 +487,95 @@ class Monitor(object):
                 #         self.say(name + f"猛砸{pct_chg_diff}")
                 #         self.set_record_time(record_key)
 
-                #撬板
-                if data["low"] <= round(data["pre_close"]*(1 - limit_up_pct), 2) and data["close"] > data["low"]:
-                    record_key = notify_code + ", has_up"
-                    if not self.is_recorded(record_key, 600):
-                        #self.dingding(record_key)
-                        self.log(name + "撬板")
-                        self.say(name + "撬板")
-                        self.set_record_time(record_key)
+                # # 撬板
+                # if data["low"] <= round(data["pre_close"]*(1 - limit_up_pct), 2) and data["close"] > data["low"]:
+                #     record_key = notify_code + ", has_up"
+                #     if not self.is_recorded(record_key, 600):
+                #         #self.dingding(record_key)
+                #         self.log(name + "撬板")
+                #         self.say(name + "撬板")
+                #         self.set_record_time(record_key)
 
-                #炸板
-                if data["high"] >= round(data["pre_close"]*(1 + limit_up_pct), 2) and data["close"] < data["high"]:
-                    record_key = notify_code + ", has_down"
-                    if not self.is_recorded(record_key, 600):
-                        #self.dingding(record_key)
-                        self.log(name + "炸板")
-                        self.say(name + "炸板")
-                        self.set_record_time(record_key)
+                # # 炸板
+                # if data["high"] >= round(data["pre_close"]*(1 + limit_up_pct), 2) and data["close"] < data["high"]:
+                #     record_key = notify_code + ", has_down"
+                #     if not self.is_recorded(record_key, 600):
+                #         #self.dingding(record_key)
+                #         self.log(name + "炸板")
+                #         self.say(name + "炸板")
+                #         self.set_record_time(record_key)
 
                 pct_chg = round(data["pct_chg"], 1)
-                #大涨
-                if up_pct != 0 and pct_chg > up_pct:
-                    record_key = notify_code + ", out_up"
-                    if not self.is_recorded(record_key, 3600):
-                        self.dingding(record_key)
-                        self.log(name + f"暴涨{pct_chg}")
-                        self.say(name + f"暴涨{pct_chg}")
-                        self.set_record_time(record_key)
-                #大跌
-                elif down_pct != 0 and pct_chg < down_pct:
-                    record_key = notify_code + ", out_down"
-                    if not self.is_recorded(record_key, 3600):
-                        self.dingding(record_key)
-                        self.log(name + f"暴跌{pct_chg}")
-                        self.say(name + f"暴跌{pct_chg}")
-                        self.set_record_time(record_key)
+                # # 大涨
+                # if up_pct != 0 and pct_chg >= up_pct:
+                #     record_key = notify_code + ", out_up"
+                #     if not self.is_recorded(record_key, 7200):
+                #         self.dingding(record_key)
+                #         self.log(name + f"暴涨{pct_chg}")
+                #         self.say(name + f"暴涨{pct_chg}")
+                #         self.set_record_time(record_key)
+                # # 大跌
+                # elif down_pct != 0 and pct_chg <= down_pct:
+                #     record_key = notify_code + ", out_down"
+                #     if not self.is_recorded(record_key, 3600):
+                #         self.dingding(record_key)
+                #         self.log(name + f"暴跌{pct_chg}")
+                #         self.say(name + f"暴跌{pct_chg}")
+                #         self.set_record_time(record_key)
 
-            #成交量激增
-            record_key = notify_code + ", v_up"
+            # 成交量激增
+            record_key = notify_code + ", vol_up"
             avp_volume = sum(map(float, self.volume_diff_list[code]))/len(self.volume_diff_list[code])
             volume_diff = data["volume"] - self.last_volume[code]
-            #if not self.is_recorded(record_key, 5) and volume_diff > avp_volume * 4 and volume_diff > min_volume_diff:
-            if not self.is_recorded(record_key, 5) and volume_diff*data["close"]*100 > min_volume_diff:
-                #self.dingding(record_key)
+            if not self.is_recorded(record_key, 5) and (
+                (volume_diff > avp_volume * 4 and volume_diff >= 1000) or
+                (volume_diff*data["close"]*100 >= min_amount_diff)
+            ):
+                # self.dingding(record_key)
                 vd = str(volume_diff)[0] + "0"*(len(str(volume_diff))-1)
-                self.log(name + f"成交{vd}")
-                self.say(name + f"成交{vd}")
+                self.log(name + f"激增{vd}")
+                self.say(name + f"激增{vd}")
                 self.set_record_time(record_key)
 
-            #if not self.is_recorded(code, 5):
-            #    self.__set_last_data(code, data)
-            #    self.set_record_time(code)
+            # 高换手
+            record_key = notify_code + ", turnover_up"
+            if not self.is_recorded(record_key, 7200) and data["turnover"] >= 20:
+                # self.dingding(record_key)
+                self.log(name + "高换")
+                self.say(name + "高换")
+                self.set_record_time(record_key)
+
             self.__set_last_data(code, data)
+
         except Exception as e:
             err_log()
             core.say("子线程发生错误" + code)
             core.dingding("子线程发生错误")
 
     ban_code_list = []
+
     def __set_last_data(self, code, data):
         volume_diff = data["volume"]
         if code in self.last_volume:
             volume_diff = data["volume"] - self.last_volume[code]
         if code not in self.volume_diff_list:
             self.volume_diff_list[code] = []
-        if len(self.volume_diff_list[code]) >=  10:
+        if len(self.volume_diff_list[code]) >= 16:
             self.volume_diff_list[code].pop(0)
         self.volume_diff_list[code].append(volume_diff)
 
-        self.last_volume[code] = data["volume"]
         self.last_buy1_lots[code] = data["buy1_lots"]
         self.last_sell1_lots[code] = data["sell1_lots"]
-        self.last_pct_chg[code] = data["pct_chg"]
+
+        record_key = code+", last_volume"
+        if not self.is_recorded(record_key, 10):
+            self.last_volume[code] = data["volume"]
+            self.set_record_time(record_key)
+
+        record_key = code + ", pct_chg"
+        if not self.is_recorded(record_key, 10):
+            self.last_pct_chg[code] = data["pct_chg"]
+            self.set_record_time(record_key)
 
     def __get_code_list(self, filename):
         with open(filename, 'r') as f:
@@ -556,6 +610,54 @@ class Monitor(object):
             for code in code_list:
                 pool.submit(self.__scan_up_stock, code, up_pct = 1, down_pct = -1)
             pool.shutdown()
+            pool.shutdown()
+
+    def report_risk(self):
+        threads = []
+        results = []
+
+        # 读取代码列表并启动线程
+        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/risk.txt")
+        for code in code_list:
+            thread = threading.Thread(target=self.__update_results, args=(code, results))
+            thread.start()
+            threads.append(thread)
+
+        # 等待所有线程结束
+        for thread in threads:
+            thread.join()
+
+        total_chg=0
+        for stock in results:
+            total_chg+=stock["pct_chg"]
+        avg_chg=total_chg/len(results)
+
+        record_key = "risk_in"
+        if not self.is_recorded(record_key, 3600) and avg_chg <= -3:
+            print("avg_chg",avg_chg)
+            #self.dingding(record_key)
+            self.log("极度危险")
+            self.say("极度危险")
+            self.set_record_time(record_key)
+        if not self.is_recorded(record_key, 300) and avg_chg > -3 and avg_chg <= 0:
+            print("avg_chg",avg_chg)
+            #self.dingding(record_key)
+            self.log("风险预警")
+            self.say("风险预警")
+            self.set_record_time(record_key)
+
+        record_key = "risk_out"
+        if not self.is_recorded(record_key, 300) and avg_chg > 0  and avg_chg < 3:
+            print("avg_chg",avg_chg)
+            #self.dingding(record_key)
+            self.log("风险解除")
+            self.say("风险解除")
+            self.set_record_time(record_key)
+
+    def __update_results(self, code, results):
+        # 通过调用__get_live_data方法获取数据，并更新结果字典
+        data = self.__get_live_data(code)
+        results.append(data)
 
     def report_market(self):
         now = datetime.datetime.now()
@@ -590,7 +692,7 @@ class Monitor(object):
 
 parser = argparse.ArgumentParser(description='股票监控')
 # parser.add_argument('--project', '-p', help='项目值, 可选值:\n up:打板监控, all:全部. 默认为全部', default="all", choices=["all", "ban"])
-parser.add_argument('project', help='项目值, 可选值:\n up:打板监控, weight:风向股, bond:可转债, buying:准备买入的股票, etf:etf基金, report:行情实时播报. 默认为etf', default="etf", choices=["etf", "up", "weight", "bond", "buying", "report"])
+parser.add_argument('project', help='项目值, 可选值:\n up:打板监控, weight:风向股, bond:可转债, buying:准备买入的股票, etf:etf基金, report:行情实时播报. 默认为etf', default="etf", choices=["etf", "up", "weight", "bond", "buying", "report", "risk"])
 parser.add_argument('is_dev', help='是否为调试模式, 可选值:\n 0:否, 1:是. 默认为0', default=0,  type = int, choices=[0, 1])
 args = parser.parse_args()
 if __name__ == '__main__':
@@ -604,10 +706,10 @@ if __name__ == '__main__':
     while True:
         now = datetime.datetime.now()
         today_date = str(now.date())
-        begin = datetime.datetime.strptime(today_date + " 09:30", "%Y-%m-%d %H:%M")
+        begin = datetime.datetime.strptime(today_date + " 09:25", "%Y-%m-%d %H:%M")
         end = datetime.datetime.strptime(today_date + " 11:30", "%Y-%m-%d %H:%M")
         begin2 = datetime.datetime.strptime(today_date + " 13:00", "%Y-%m-%d %H:%M")
-        end2 = datetime.datetime.strptime(today_date + " 14:56", "%Y-%m-%d %H:%M")
+        end2 = datetime.datetime.strptime(today_date + " 15:00", "%Y-%m-%d %H:%M")
         if is_dev == 1 or (now.weekday() in range(0, 5) and (begin <= now <= end or begin2 <= now <= end2)):
             try:
                 if args.project == "etf":
@@ -622,8 +724,12 @@ if __name__ == '__main__':
                     core.scan_buying()
                 elif args.project == "report":
                     core.report_market()
+                    core.scan_buying()
+                elif args.project == "risk":
+                    core.report_risk()
+                    time.sleep(300)
             except Exception:
                 err_log()
                 core.say("发生错误")
                 core.dingding("发生错误")
-        time.sleep(1)
+        time.sleep(0.2)

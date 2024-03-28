@@ -3,7 +3,7 @@ import pyttsx3
 
 def init_engine():
     engine = pyttsx3.init()
-    engine.setProperty('rate', 300)
+    engine.setProperty('rate', 410)
     return engine
 
 def say(s):
