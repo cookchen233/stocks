@@ -15,6 +15,13 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
+import pandas
+
+from datetime import datetime, timedelta
+import holidays
+from chinese_calendar import is_holiday, is_workday
+
+
 def say(msg):
     subprocess.call(["python3", os.path.abspath(os.path.dirname(__file__)) + "/speak.py", msg])
 
@@ -314,3 +321,126 @@ def array_chunk(list, rows=2, cols=2):
 
 def get_part_filename(filename):
     return os.path.basename(os.path.dirname(filename)) + "/" + os.path.basename(filename)
+
+
+def get_row_from_excel(filename, condition):
+    script_directory = os.path.dirname(os.path.realpath(__file__))
+    df = pandas.read_excel(filename)
+    filtered_data = df[condition]
+    data = pandas.DataFrame(filtered_data).to_dict(orient='records')
+    if data:
+        return data[0]
+    return None
+
+
+def get_code_list(filename):
+    try:
+        with open(filename, 'r', encoding='GBK') as f:
+            lines = f.readlines()
+    except UnicodeDecodeError:
+        try:
+            with open(filename, 'r', encoding='UTF-8') as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            with open(filename, 'r', encoding='Latin-1') as f:
+                lines = f.readlines()
+
+    code_list = []
+    for code in lines:
+        code = code.replace("SH", "").replace("SZ", "").strip()[:6]
+        if code and len(code) >= 6 and code[0].isdigit():
+            code_list.append(code)
+
+    return list(set(code_list))
+
+
+def get_files(directory):
+    files_info = []  # 存储文件信息的字典数组
+
+    # 遍历目录中的所有文件和子目录
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if not file.startswith('.'):  # 检查文件名是否不以点开头（即非隐藏文件）
+                file_path = os.path.join(root, file)  # 获取文件的全路径
+                file_name, _ = os.path.splitext(file)  # 获取文件名并去除扩展名
+                # 检查文件名是否非空
+                if file_name:
+                    files_info.append({'path': file_path, 'name': file_name})  # 将文件信息存储到字典中并添加到数组中
+
+    return files_info
+
+
+def get_code_market(code):
+    if code.startswith('60') or code.startswith('900') or code.startswith('11') or code.startswith('5'):
+        return 1
+    return 0
+
+
+def get_code_market2(code):
+    if code.startswith('60') or code.startswith('900') or code.startswith('11') or code.startswith('5'):
+        return "sh"
+    return "sz"
+
+
+country_holidays = holidays.country_holidays("CN", years=2023)
+holiday_dates = set(country_holidays.keys())
+
+
+# 定义一个函数，用于根据日期得出一个数值
+def calculate_value(date_str):
+    # 将字符串日期转换为 datetime 对象
+    date = datetime.strptime(date_str, '%Y-%m-%d')
+
+    # 初始化值为0
+    value = 0
+
+    # 如果是周末或者节假日，返回上一个有效日期的值
+    while date.weekday() >= 5 or is_holiday(date):
+        date -= timedelta(days=1)
+
+    # 计算天数差
+    days_diff = (datetime.now() - date).days - 1
+
+    # 每天增加48，周末或节假日不增加
+    for i in range(days_diff):
+        current_date = date + timedelta(days=i)
+        if current_date.weekday() < 5 and not is_holiday(current_date):
+            value += 48
+
+    return value
+
+
+def range_dates(start_date_str, end_date_str):
+    start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+    end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+    dates = []
+    current_date = start_date
+    while current_date <= end_date:
+        if current_date.weekday() < 5 and not is_holiday(current_date):
+            dates.append(current_date)
+        current_date += timedelta(days=1)
+    return dates
+
+
+def before_dates(date_str, days):
+    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+    dates = []
+    current_date = target_date
+    while len(dates) < days:
+        if not is_holiday(current_date) and current_date.weekday() < 5:
+            dates.append(current_date)
+        current_date -= timedelta(days=1)
+    return dates[::-1]  # 返回反向排序的日期列表
+
+def after_dates(date_str, days):
+    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+    dates = []
+    current_date = target_date
+    while len(dates) < days:
+        current_date += timedelta(days=1)
+        if not is_holiday(current_date) and current_date.weekday() < 5:
+            dates.append(current_date)
+    return dates
+
+
+

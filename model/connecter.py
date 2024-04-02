@@ -50,7 +50,7 @@ class DataBase(object):
     engine = object
 
     def __init__(self):
-        self.connect_link = "mysql+pymysql://yezishui:yezishui198312@127.0.0.1:3306/ch_stocks?charset=utf8"
+        self.connect_link = "mysql+pymysql://root:@127.0.0.1:3306/stocks?charset=utf8"
         connection = Connecter.get_instance(self.connect_link)
         self.session = connection[0]
         self.engine = connection[1]
@@ -213,4 +213,76 @@ class SsfStock(Base):
     stock_inc_rate = Column(DECIMAL, nullable=False)
     income = Column(DECIMAL, nullable=False)
     cum_income = Column(DECIMAL, nullable=False)
+
+class StockFiveMinutes(Base):
+    __tablename__ = 'stock_five_minutes'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, unique=True)
+    name = Column(String)
+    date = Column(String)
+    time = Column(String)
+    open = Column(DECIMAL)
+    high = Column(DECIMAL)
+    low = Column(DECIMAL)
+    close = Column(DECIMAL)
+    pct_chg = Column(DECIMAL)
+    day_pct_chg = Column(DECIMAL)
+    day_pct_chg2 = Column(DECIMAL)
+    volume = Column(BigInteger)
+    amount = Column(BigInteger)
+    field_m = Column(Integer, default=0)
+    field_n = Column(Integer, default=0)
+    field_i = Column(DECIMAL, default=0)
+    field_j = Column(DECIMAL, default=0)
+    field_x = Column(String, default="")
+    field_y = Column(String, default="")
+
+class StockM5Klines(Base):
+    __tablename__ = 'stock_m5_klines'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, unique=True)
+    name = Column(String)
+    date = Column(String)
+    time = Column(String)
+    open = Column(DECIMAL)
+    high = Column(DECIMAL)
+    low = Column(DECIMAL)
+    close = Column(DECIMAL)
+    pct_chg = Column(DECIMAL)
+    day_pct_chg = Column(DECIMAL)
+    day_pct_chg2 = Column(DECIMAL)
+    volume = Column(BigInteger)
+    amount = Column(BigInteger)
+    field_m = Column(Integer, default=0)
+    field_n = Column(Integer, default=0)
+    field_i = Column(DECIMAL, default=0)
+    field_j = Column(DECIMAL, default=0)
+    field_x = Column(String, default="")
+    field_y = Column(String, default="")
+
+
+class MinuteKlines(Base):
+    __tablename__ = 'minute_klines'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    create_time = Column(String)
+    code = Column(String)
+    name = Column(String)
+    trans_time = Column(String)
+    open = Column(DECIMAL)
+    high = Column(DECIMAL)
+    low = Column(DECIMAL)
+    close = Column(DECIMAL)
+    pct_chg = Column(DECIMAL)
+    day_pct_chg = Column(DECIMAL)
+    day_pct_chg2 = Column(DECIMAL)
+    volume = Column(BigInteger)
+    amount = Column(BigInteger)
+    turnover = Column(DECIMAL)
+    real_turnover = Column(DECIMAL)
+    field_m = Column(Integer, default=0)
+    field_n = Column(Integer, default=0)
+    field_i = Column(DECIMAL, default=0)
+    field_j = Column(DECIMAL, default=0)
+    field_x = Column(String, default="")
+    field_y = Column(String, default="")
 
