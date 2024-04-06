@@ -7,6 +7,10 @@ from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column,BigInteger, DECIMAL, Integer,SmallInteger, String, Text, ForeignKey, Date, DateTime, UniqueConstraint, Index, sql, text
+from sqlalchemy.orm import Query
+from datetime import date, timedelta
+from sqlalchemy import event
+from sqlalchemy.dialects import mysql
 
 class Connecter(object):
 
@@ -263,22 +267,28 @@ class StockM5Klines(Base):
 
 class MinuteKlines(Base):
     __tablename__ = 'minute_klines'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    create_time = Column(String)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    create_time = Column(DateTime, default=datetime.now)
     code = Column(String)
     name = Column(String)
-    trans_time = Column(String)
+    close_time = Column(DateTime)
     open = Column(DECIMAL)
-    high = Column(DECIMAL)
-    low = Column(DECIMAL)
+    high = Column(DECIMAL, default=0)
+    low = Column(DECIMAL, default=0)
     close = Column(DECIMAL)
     pct_chg = Column(DECIMAL)
+    volume = Column(BigInteger, default=0)
+    amount = Column(DECIMAL, default=0)
     day_pct_chg = Column(DECIMAL)
     day_pct_chg2 = Column(DECIMAL)
-    volume = Column(BigInteger)
-    amount = Column(BigInteger)
-    turnover = Column(DECIMAL)
-    real_turnover = Column(DECIMAL)
+    day_turnover = Column(DECIMAL, default=0)
+    day_amount = Column(DECIMAL, default=0)
+    day_market_value = Column(DECIMAL)
+    limit_up_days = Column(Integer, default=0)
+    up_days = Column(Integer, default=0)
+    day5_pct_chg = Column(DECIMAL, default=0)
+    day10_pct_chg = Column(DECIMAL, default=0)
+    day20_pct_chg = Column(DECIMAL, default=0)
     field_m = Column(Integer, default=0)
     field_n = Column(Integer, default=0)
     field_i = Column(DECIMAL, default=0)

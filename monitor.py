@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import akshare as ak
 import counter
+import stock
 from tool import *
 
 class Monitor(object):
@@ -20,7 +21,7 @@ class Monitor(object):
     tts = None
     session = None
     notify_queues = None
-    stock_static_info = {}
+    stock = None
 
     def __init__(self):
         self.notify_queues = {
@@ -34,8 +35,8 @@ class Monitor(object):
             t.start()
 
         self.session = requests.Session()
-        self.__get_live_data = retry_decorator(self.__get_live_data)
-        ak.stock_zh_index_daily_em = retry_decorator(ak.stock_zh_index_daily_em)
+        self.stock = stock.Stock()
+    ak.stock_zh_index_daily_em = retry_decorator(ak.stock_zh_index_daily_em)
 
     def  __exit__(self, exc_type, exc_val, exc_tb):
         pass
@@ -123,69 +124,6 @@ class Monitor(object):
             "换手":float(data["f168"]),
             "市盈率":float(data["f162"]),
         }
-
-    def __get_live_data(self, code):
-        secid = f"1.{code}" if code.startswith('60') or code.startswith('900') or code.startswith(
-            '11') or code.startswith('688') else f"0.{code}"
-        url = "https://push2.eastmoney.com/api/qt/stock/get"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36",
-        }
-        params = {
-            "fltt": "2",
-            "invt": "2",
-            "klt": "1",
-            "secid": secid,
-            "fields": "f57,f58,f60,f43,f44,f45,f47,f170,f19,f20,f39,f40,f530,f168,f46",
-            "ut": "b2884a393a59ad64002292a3e90d46a5",
-            # "cb": "jQuery183003743205523325188_1589197499471",
-            "_": int(time.time() * 1000),
-        }
-        r = self.session.get(url, params=params, headers=headers)
-        data = json.loads(r.text)["data"]
-        if not data:
-            print(code)
-        turnover = float(data["f168"]) if data["f168"] != "-" else float(data["f168"])
-        static_info = self.__get_stock_static_info(code)
-        if static_info:
-            real_turnover_ratio = float(static_info["比"])
-        else:
-            real_turnover_ratio = 1
-
-        return {
-            "code": data["f57"],
-            "name": data["f58"],
-            "pre_close": float(data["f60"]),
-            "open": float(data["f46"]) if data["f46"] != "-" else float(data["f60"]),
-            "close": float(data["f43"]) if data["f43"] != "-" else float(data["f60"]),
-            "high": float(data["f44"]) if data["f44"] != "-" else float(data["f60"]),
-            "low": float(data["f45"]) if data["f45"] != "-" else float(data["f60"]),
-            "pct_chg": float(data["f170"]) if data["f170"] != "-" else 0,
-            "buy1_lots": int(data["f20"]) if data["f20"] != "-" else 0,
-            "sell1_lots": int(data["f40"]) if data["f40"] != "-" else 0,
-            "volume": int(data["f47"]) if data["f47"] != "-" else 0,
-            "turnover": turnover,
-            "real_turnover": turnover * real_turnover_ratio,
-            "real_turnover_ratio": real_turnover_ratio,
-        }
-
-    def __get_stock_static_info(self, code):
-        if code in self.stock_static_info:
-            return self.stock_static_info[code]
-
-        script_directory = os.path.dirname(os.path.realpath(__file__))
-        filename = os.path.join(script_directory, "conf/stock_static_info.xlsx")
-        df = pd.read_excel(filename)
-
-        # 查找某一列为特定值的数据
-        column_name = "代码"  # 列名
-        search_value = int(code)  # 要查找的值
-        filtered_data = df[df[column_name] == search_value]
-        data = pd.DataFrame(filtered_data).to_dict(orient='records')
-        if data:
-            self.stock_static_info[code] = data[0]
-            return self.stock_static_info[code]
-        return None
 
     def __symbol_code(self, code):
         return f"sh{code}" if code.startswith('60') or code.startswith('900') or code.startswith('11') or code.startswith('5') else f"sz{code}"
@@ -394,7 +332,7 @@ class Monitor(object):
                 print("x")
                 return
 
-            data = self.__get_live_data(code)
+            data = self.stock.get_live_data(code)
             name = data["name"][0:2]
 
             # print(data["name"])
@@ -516,7 +454,7 @@ class Monitor(object):
             record_key = notify_code + ", vol_up"
             avp_volume = sum(map(float, self.volume_diff_list[code]))/len(self.volume_diff_list[code])
             volume_diff = data["volume"] - self.last_volume[code]
-            min_volume_diff = 1000
+            min_volume_diff = 500
             min_amount_diff = 5000000
             if datetime.now().time() < datetime.strptime("09:40", "%H:%M").time():
                 min_volume_diff = 9000
@@ -573,8 +511,9 @@ class Monitor(object):
             lines = f.readlines()
         code_list = []
         for code in lines:
-            code = code.replace("SH", "").replace("SZ", "").strip()[:6]
-            if code and len(code) >= 6 and code[0].isdigit():
+            # code = code.replace("SH", "").replace("SZ", "").strip()[:6]
+            code = code.strip()[:8]
+            if code and len(code) >= 8 and code[2].isdigit():
                 code_list.append(code)
         return list(set(code_list))
 
@@ -701,8 +640,8 @@ class Monitor(object):
             self.set_record_time(record_key)
 
     def __update_results(self, code, results):
-        # 通过调用__get_live_data方法获取数据，并更新结果字典
-        data = self.__get_live_data(code)
+        # 通过调用get_live_data方法获取数据，并更新结果字典
+        data = self.stock.get_live_data(code)
         results.append(data)
 
     def report_market(self):

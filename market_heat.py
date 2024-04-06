@@ -1,9 +1,3 @@
-import argparse
-import sys
-import threading
-import time
-
-import pymysql
 from tool import *
 import pandas as pd
 from model.connecter import *
@@ -11,28 +5,25 @@ from model.connecter import *
 from datetime import datetime, timedelta
 import stock
 import matplotlib.pyplot as plt
-from matplotlib.dates import AutoDateLocator, DateFormatter
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.colors import Normalize
-from matplotlib import colormaps, MatplotlibDeprecationWarning
-import matplotlib.cm as cm
+from matplotlib import MatplotlibDeprecationWarning
 import warnings
 import numpy as np
-import matplotlib.ticker as ticker
-
-# 更换字体
+import cv2
 plt.rcParams["font.family"] = "Arial Unicode MS"
-# 忽略特定警告
 warnings.filterwarnings("ignore", category=MatplotlibDeprecationWarning)
-
 
 class Heat(object):
     stock = None
     db = None
 
+    interval = 5
+    limit_up_range_days = 8
+    limit_up_days = 2
+
     # 龙头周期配置
     leadings = [
-        ("华生", datetime(2024, 3, 21), datetime(2024, 4, 10)),
+        ("联明", datetime(2024, 4, 3), datetime(2024, 4, 20)),
+        ("华生", datetime(2024, 3, 21), datetime(2024, 4, 2)),
         ("宁科", datetime(2024, 3, 20), datetime(2024, 3, 28)),
         ("艾艾", datetime(2024, 3, 5), datetime(2024, 3, 21)),
         ("安彩", datetime(2024, 3, 4), datetime(2024, 3, 11)),
@@ -106,8 +97,6 @@ class Heat(object):
         ("顾地", datetime(2021, 12, 29), datetime(2022, 1, 7)),
     ]
 
-    interval = 5
-
     def __init__(self):
         self.stock = stock.Stock()
         self.db = DataBase()
@@ -118,7 +107,7 @@ class Heat(object):
         result = "混沌", "blue"
         for i in range(len(self.leadings)):
             comment, range_start, range_end = self.leadings[i]
-            if date == after_dates(range_end.strftime('%Y-%m-%d'), 1)[0]:
+            if date == after_dates(range_end, 1)[0]:
                 result = comment, "green"
                 break
             if range_start <= date <= range_end:
@@ -149,11 +138,15 @@ class Heat(object):
                 ax.axvline(idx, color=(0.8, 0.8, 0.8), linestyle='--')  # 绘制较淡的灰色虚线作为分割线
 
         # 仅显示指定条件的刻度
-        for label in ax.get_xticklabels():
+        x_ticks = []
+        x_ticklabels = []
+        for idx, label in enumerate(ax.get_xticklabels()):
             txt = label.get_text()
+            label.set_text(txt[11:16])
             if '09:30' in txt or '10:30' in txt or '11:30' in txt or '14:00' in txt or '14:30' in txt:
                 if '09:30' in txt:
                     label.set_fontsize(22)
+                    label.set_text(txt[0:10])
                 elif '14:00' in txt:
                     label.set_horizontalalignment('right')  # 设置水平对齐方式为右对齐
                     x_comment, x_color = self.get_x_comment(txt)
@@ -163,16 +156,22 @@ class Heat(object):
                     label.set_fontsize(12)
             else:
                 label.set_visible(False)
+            x_ticks.append(idx)
+            x_ticklabels.append(label)
+
+        ax.set_xticks(x_ticks)
+        ax.set_xticklabels(x_ticklabels)
 
         plt.xticks(rotation=90)
 
         plt.tight_layout()
-        plt.savefig("./data/market-heat-{}-to-{}.png".format(x_data[-1][0:10], x_data[0][:10]))
+        filename="./data/market-heat-{}-to-{}-{}-{}.png".format(x_data[-1][0:10], x_data[0][:10], self.limit_up_days, self.limit_up_range_days)
+        plt.savefig(filename)
 
         # 显示图形
         # plt.show()
 
-    def generate_five_minutes(self):
+    def generate_interval_minutes(self):
         start_time_morning = datetime.strptime("09:30", "%H:%M")
         end_time_morning = datetime.strptime("11:30", "%H:%M")
 
@@ -195,9 +194,8 @@ class Heat(object):
         return time_data
 
     def get_xy_data(self, date):
-        minutes = self.generate_five_minutes()
+        minutes = self.generate_interval_minutes()
         date_str = date.strftime("%Y-%m-%d")
-        print(date_str)
         x_data = []
         y_data = []
         for minute in minutes:
@@ -214,9 +212,21 @@ class Heat(object):
 
     def calculate_xy(self, date, minute):
         x_value = date.strftime("%Y-%m-%d") + " " + minute
-        klines = self.db.session.query(MinuteKlines).filter(*[
-            MinuteKlines.trans_time == x_value + ":00",
-        ]).all()
+        # klines = self.db.session.query(MinuteKlines).filter(*[
+        #     MinuteKlines.trans_time == x_value + ":00",
+        # ]).all()
+        stocks = self.stock.get_continuous_limit_up_stocks(date, self.limit_up_days, self.limit_up_range_days)
+        codes = [stock.code for stock in stocks]  # 提取每个结果的 code 字段并组装成数组
+        query = (
+            self.db.session.query(MinuteKlines)
+            .filter(
+                MinuteKlines.code.in_(codes),
+                MinuteKlines.close_time == datetime.strptime(date.strftime("%Y-%m-%d") + " " + minute, "%Y-%m-%d %H:%M")
+            )
+        )
+        klines = query.all()
+        sql = query.statement.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True})
+        print("len(klines)",len(klines), sql)
         pct_chg = 0
         coef_high = 1
         coef_low = 1
@@ -224,7 +234,6 @@ class Heat(object):
         for kline in klines:
             # 涨跌幅系数, 当日涨跌幅与相对开盘的涨跌幅的均值.
             avg = (kline.day_pct_chg + kline.day_pct_chg2) / 2
-            print(kline.code, avg, kline.day_pct_chg,  kline.day_pct_chg2)
             if kline.day_pct_chg2 > 7:
                 coef_high *= 1.01
             elif kline.day_pct_chg2 < -7:
@@ -239,9 +248,9 @@ class Heat(object):
 
         # 极端情况下, 所有股票天地板将是 -15%, +15用于抹去y轴的负数表示
         coef_pct_chg = (pct_chg / count) + 15
-        coef_count = (1 + count / 60)
+        coef_count = (1 + count / 200)
 
-        print(date, coef_pct_chg, coef_count, coef_high, coef_low)
+        print(date.date(), minute, len(stocks), coef_count, coef_pct_chg, coef_high, coef_low)
         y_value = coef_pct_chg * coef_count * coef_high * coef_low
         return x_value, y_value
 
@@ -249,45 +258,8 @@ class Heat(object):
 if __name__ == '__main__':
     heat = Heat()
 
-    date_ranges = [
-        ("2022-01-24", "2022-02-28"),
-        ("2022-03-01", "2022-03-31"),
-        ("2022-04-01", "2022-04-30"),
-        ("2022-05-01", "2022-05-31"),
-        ("2022-06-01", "2022-06-30"),
-        ("2022-07-01", "2022-07-31"),
-        ("2022-08-01", "2022-08-31"),
-        ("2022-09-01", "2022-09-30"),
-        ("2022-10-01", "2022-10-31"),
-        ("2022-11-01", "2022-11-30"),
-        ("2022-12-01", "2022-12-31"),
-        ("2023-01-01", "2023-01-31"),
-        ("2023-02-01", "2023-02-28"),
-        ("2023-03-01", "2023-03-31"),
-        ("2023-04-01", "2023-04-30"),
-        ("2023-05-01", "2023-05-31"),
-        ("2023-06-01", "2023-06-30"),
-        ("2023-07-01", "2023-07-31"),
-        ("2023-08-01", "2023-08-31"),
-        ("2023-09-01", "2023-09-30"),
-        ("2023-10-01", "2023-10-31"),
-        ("2023-11-01", "2023-11-30"),
-        ("2023-12-01", "2023-12-31"),
-        ("2024-01-01", "2024-01-30"),
-        ("2024-03-05", "2024-03-31"),
-    ]
-    # dates = range_dates(date_ranges[23][0], date_ranges[23][1])
-    # x_data = []
-    # y_data = []
-    # for date in dates:
-    #     x, y = heat.get_xy_data(date)
-    #     x_data.extend(x)
-    #     y_data.extend(y)
-    # heat.draw(x_data, y_data)
-    # sys.exit()
-
-
-    dates = before_dates(datetime.now().strftime("%Y-%m-%d"), 20)
+    dates = before_dates(datetime.now(), 2)
+    print(dates)
     today = dates.pop()
     x_data = []
     y_data = []
@@ -299,7 +271,7 @@ if __name__ == '__main__':
 
     # 当天数据, 追加
     while True:
-        x, y = heat.get_xy_data(datetime.now())
+        x, y = heat.get_xy_data(today)
         x2, y2 = x_data[:], y_data[:]
         x2.extend(x)
         y2.extend(y)

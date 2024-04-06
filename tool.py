@@ -15,6 +15,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
+import cv2
 import pandas
 
 from datetime import datetime, timedelta
@@ -347,8 +348,9 @@ def get_code_list(filename):
 
     code_list = []
     for code in lines:
-        code = code.replace("SH", "").replace("SZ", "").strip()[:6]
-        if code and len(code) >= 6 and code[0].isdigit():
+        # code = code.replace("SH", "").replace("SZ", "").strip()[:6]
+        code = code.strip()[:8]
+        if code and len(code) == 8 and code[2:].isdigit():
             code_list.append(code)
 
     return list(set(code_list))
@@ -410,9 +412,7 @@ def calculate_value(date_str):
     return value
 
 
-def range_dates(start_date_str, end_date_str):
-    start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+def range_dates(start_date, end_date):
     dates = []
     current_date = start_date
     while current_date <= end_date:
@@ -422,8 +422,7 @@ def range_dates(start_date_str, end_date_str):
     return dates
 
 
-def before_dates(date_str, days):
-    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+def before_dates(target_date, days):
     dates = []
     current_date = target_date
     while len(dates) < days:
@@ -432,8 +431,7 @@ def before_dates(date_str, days):
         current_date -= timedelta(days=1)
     return dates[::-1]  # 返回反向排序的日期列表
 
-def after_dates(date_str, days):
-    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+def after_dates(target_date, days):
     dates = []
     current_date = target_date
     while len(dates) < days:
@@ -441,6 +439,41 @@ def after_dates(date_str, days):
         if not is_holiday(current_date) and current_date.weekday() < 5:
             dates.append(current_date)
     return dates
+
+def unit_to_int(txt):
+    # 定义单位和对应的倍数
+    units = {"亿": 100000000, "万": 10000}
+
+    # 获取字符串中的数字部分
+    num_str = txt[:-1]
+
+    # 获取单位
+    unit = txt[-1]
+
+    # 将数字字符串转换为浮点数
+    num = float(num_str)
+
+    # 根据单位转换为整数
+    if unit in units:
+        num *= units[unit]
+
+    return float(num)
+
+def rotate_image(image, angle, center=None, scale=1.0):
+    # grab the dimensions of the image
+    (h, w) = image.shape[:2]
+
+    # if the center is None, initialize it as the center of
+    # the image
+    if center is None:
+        center = (w // 2, h // 2)
+
+    # perform the rotation
+    M = cv2.getRotationMatrix2D(center, angle, scale)
+    rotated = cv2.warpAffine(image, M, (w, h))
+
+    # return the rotated image
+    return rotated
 
 
 

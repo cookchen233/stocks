@@ -14,10 +14,12 @@ from bs4 import BeautifulSoup
 from matplotlib import ticker
 from pyttsx3 import Engine
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func
+from sqlalchemy import func, between
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+
+from sqlalchemy.orm import aliased
 
 from tool import *
 from model.connecter import *
@@ -32,9 +34,12 @@ from openpyxl import load_workbook
 
 
 class Stock(object):
-    stock_static_info = {}
+
+    static_info = {}
+    db = None
 
     def __init__(self):
+        self.db = DataBase()
         self.session = requests.Session()
         self.get_live_data = retry_decorator(self.get_live_data)
         ak.stock_zh_index_daily_em = retry_decorator(ak.stock_zh_index_daily_em)
@@ -90,8 +95,7 @@ class Stock(object):
         }
 
     def get_live_data(self, code):
-        secid = f"1.{code}" if code.startswith('60') or code.startswith('900') or code.startswith(
-            '11') or code.startswith('688') else f"0.{code}"
+        secid = code.replace("SH", "1.").replace("SZ", "0.")
         url = "https://push2.eastmoney.com/api/qt/stock/get"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36",
@@ -111,9 +115,9 @@ class Stock(object):
         if not data:
             print(code)
         turnover = float(data["f168"]) if data["f168"] != "-" else float(data["f168"])
-        static_info = self.__get_stock_static_info(code)
+        static_info = self.get_static_info(code)
         if static_info:
-            real_turnover_ratio = static_info["比"]
+            real_turnover_ratio = float(static_info["股比"])
         else:
             real_turnover_ratio = 1.0
 
@@ -134,9 +138,9 @@ class Stock(object):
             "real_turnover_ratio": real_turnover_ratio,
         }
 
-    def __get_stock_static_info(self, code):
-        if code in self.stock_static_info:
-            return self.stock_static_info[code]
+    def get_static_info(self, code):
+        if code in self.static_info:
+            return self.static_info[code]
 
         script_directory = os.path.dirname(os.path.realpath(__file__))
         filename = os.path.join(script_directory, "conf/stock_static_info.xlsx")
@@ -144,12 +148,14 @@ class Stock(object):
 
         # 查找某一列为特定值的数据
         column_name = "代码"  # 列名
-        search_value = int(code)  # 要查找的值
+        search_value = code  # 要查找的值
         filtered_data = df[df[column_name] == search_value]
         data = pd.DataFrame(filtered_data).to_dict(orient='records')
         if data:
-            self.stock_static_info[code] = data[0]
-            return self.stock_static_info[code]
+            self.static_info[code] = data[0]
+            self.static_info[code]["流通股"] = unit_to_int(data[0]["流通股"])
+            self.static_info[code]["自由流通股"] = unit_to_int(data[0]["自由流通股"])
+            return self.static_info[code]
         return None
 
     def right_time(self, begin_time, end_time):
@@ -158,3 +164,18 @@ class Stock(object):
         begin=datetime.strptime(today_date + " "+begin_time, "%Y-%m-%d %H:%M")
         end=datetime.strptime(today_date + " "+end_time, "%Y-%m-%d %H:%M")
         return now_time.weekday() in range(0, 5) and (begin <= now_time <= end)
+
+    # 连续两天涨停
+    def get_continuous_limit_up_stocks(self, date, limit_up_days, limit_up_range_days):
+        dates = before_dates(date -  timedelta(days=1), limit_up_range_days)
+        results = (self.db.session.query(MinuteKlines)
+        .filter(
+            MinuteKlines.up_days >= limit_up_days,
+            func.extract('hour', MinuteKlines.close_time) == 15,
+            between(func.date(MinuteKlines.close_time), dates[0].date(), dates[-1].date())
+        ).group_by(MinuteKlines.code))
+        obj = results.statement.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True})
+        # print(str(obj ))
+        return results.all()
+
+
