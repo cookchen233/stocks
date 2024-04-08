@@ -36,8 +36,8 @@ class CrawlKline(object):
         self.baostock = bs
         lg = self.baostock.login()
         # 显示登陆返回信息
-        print('login respond error_code:' + lg.error_code)
-        print('login respond  error_msg:' + lg.error_msg)
+        # print('login respond error_code:' + lg.error_code)
+        # print('login respond  error_msg:' + lg.error_msg)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.tdx.disconnect()
@@ -294,14 +294,13 @@ class CrawlKline(object):
         return data_list
 
     def save_live_klines(self, code):
-        print(code)
         if not self.stock.right_time("09:30", "11:30") and not self.stock.right_time("13:00", "15:00"):
             print("非交易时间")
             return False
         klines = self.crawl_live_klines(code)
         self.db.session.add_all(self.filter_klines(code, klines))
         self.db.session.commit()
-        print(datetime.now().strftime("%Y-%m-%d %H:%M"), code, "保存成功")
+        return True
 
     def crawl_live_klines(self, code):
         static_info = self.stock.get_static_info(code)
@@ -336,7 +335,7 @@ class CrawlKline(object):
         data_list.append(data)
 
         # 1分钟线
-        klines = ak.stock_zh_a_hist_min_em(code.replace("SH","").replace("SZ", ""), start_date=str(date.date()), period="1")
+        klines = ak.stock_zh_a_hist_min_em(code.replace("SH","").replace("SZ", ""), start_date=str(date.date()), period="5")
         day_volume = 0
         day_amount = 0
         for i, kline in klines.iterrows():
@@ -404,11 +403,11 @@ def process_save_history_klines(row, dates, tasks_completed, total_tasks, lock):
 def process_save_live_klines(code, tasks_completed, total_tasks, lock):
     print("子进程执行开始", code)
     try:
-        ck.save_live_klines(code)
-        with lock:
-            tasks_completed.value += 1
-            remaining_tasks = total_tasks.value - tasks_completed.value
-            print(code, "完成", f"剩余任务数量: {remaining_tasks}")
+        if ck.save_live_klines(code):
+            with lock:
+                tasks_completed.value += 1
+                remaining_tasks = total_tasks.value - tasks_completed.value
+                print(code, "完成", f"剩余任务数量: {remaining_tasks}")
     except Exception as e:
         err_log()
         raise e
@@ -445,7 +444,7 @@ if __name__ == '__main__':
         # 关闭进程池，等待所有进程完成
         pool.close()
         pool.join()
-        print("所有任务完成")
+        print("所有任务执行完毕")
 
     elif crawl_type == "live":
         while True:
@@ -466,6 +465,6 @@ if __name__ == '__main__':
             # 关闭进程池，等待所有进程完成
             pool.close()
             pool.join()
-            print("所有任务完成")
+            print(datetime.now(), "所有任务执行完毕")
 
             sleep(20)

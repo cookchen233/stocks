@@ -164,6 +164,9 @@ class Heat(object):
 
         plt.xticks(rotation=90)
 
+        # 调整左边距
+        plt.margins(x=0.01)
+
         plt.tight_layout()
         filename="./data/market-heat-{}-to-{}-{}-{}.png".format(x_data[-1][0:10], x_data[0][:10], self.limit_up_days, self.limit_up_range_days)
         plt.savefig(filename)
@@ -226,7 +229,6 @@ class Heat(object):
         )
         klines = query.all()
         sql = query.statement.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True})
-        print("len(klines)",len(klines), sql)
         pct_chg = 0
         coef_high = 1
         coef_low = 1
@@ -258,8 +260,7 @@ class Heat(object):
 if __name__ == '__main__':
     heat = Heat()
 
-    dates = before_dates(datetime.now(), 2)
-    print(dates)
+    dates = before_dates(datetime.now(), 23)
     today = dates.pop()
     x_data = []
     y_data = []
@@ -270,6 +271,7 @@ if __name__ == '__main__':
         y_data.extend(y)
 
     # 当天数据, 追加
+    # heat.interval = 2
     while True:
         x, y = heat.get_xy_data(today)
         x2, y2 = x_data[:], y_data[:]
