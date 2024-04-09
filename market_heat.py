@@ -2,15 +2,17 @@ from tool import *
 import pandas as pd
 from model.connecter import *
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+from time import sleep
 import stock
 import matplotlib.pyplot as plt
 from matplotlib import MatplotlibDeprecationWarning
 import warnings
 import numpy as np
-import cv2
+
 plt.rcParams["font.family"] = "Arial Unicode MS"
 warnings.filterwarnings("ignore", category=MatplotlibDeprecationWarning)
+
 
 class Heat(object):
     stock = None
@@ -22,28 +24,29 @@ class Heat(object):
 
     # 龙头周期配置
     leadings = [
-        ("联明", datetime(2024, 4, 3), datetime(2024, 4, 20)),
+        ("莱绅", datetime(2024, 4, 8), datetime(2024, 4, 21)),
+        ("联明", datetime(2024, 4, 3), datetime(2024, 4, 7)),
         ("华生", datetime(2024, 3, 21), datetime(2024, 4, 2)),
         ("宁科", datetime(2024, 3, 20), datetime(2024, 3, 28)),
         ("艾艾", datetime(2024, 3, 5), datetime(2024, 3, 21)),
         ("安彩", datetime(2024, 3, 4), datetime(2024, 3, 11)),
-        ("安奈儿", datetime(2024, 2, 27), datetime(2024, 3, 6)),
+        ("安奈", datetime(2024, 2, 27), datetime(2024, 3, 6)),
         ("东方", datetime(2024, 2, 23), datetime(2024, 3, 1)),
         ("克莱", datetime(2024, 2, 1), datetime(2024, 2, 27)),
         ("中视", datetime(2024, 1, 23), datetime(2024, 2, 1)),
         ("深中", datetime(2024, 1, 9), datetime(2024, 1, 25)),
-        ("长白山", datetime(2024, 1, 2), datetime(2024, 1, 17)),
+        ("长白", datetime(2024, 1, 2), datetime(2024, 1, 17)),
         ("亚世", datetime(2023, 12, 25), datetime(2024, 1, 2)),
         ("南京", datetime(2023, 11, 28), datetime(2023, 12, 12)),
         ("东安", datetime(2023, 11, 23), datetime(2023, 12, 5)),
-        ("三柏硕", datetime(2023, 11, 10), datetime(2023, 11, 22)),
+        ("三柏", datetime(2023, 11, 10), datetime(2023, 11, 22)),
         ("银宝", datetime(2023, 11, 10), datetime(2023, 11, 21)),
         ("皇庭", datetime(2023, 11, 7), datetime(2023, 11, 15)),
         ("天威", datetime(2023, 11, 2), datetime(2023, 11, 10)),
         ("天龙", datetime(2023, 10, 25), datetime(2023, 11, 7)),
         ("高新", datetime(2023, 10, 19), datetime(2023, 11, 2)),
         ("龙洲", datetime(2023, 10, 20), datetime(2023, 10, 30)),
-        ("真视通", datetime(2023, 10, 16), datetime(2023, 10, 26)),
+        ("真视", datetime(2023, 10, 16), datetime(2023, 10, 26)),
         ("圣龙", datetime(2023, 9, 28), datetime(2023, 10, 25)),
         ("精伦", datetime(2023, 9, 9), datetime(2023, 9, 20)),
         ("捷荣", datetime(2023, 8, 29), datetime(2023, 9, 27)),
@@ -55,11 +58,11 @@ class Heat(object):
         ("日播", datetime(2023, 4, 25), datetime(2023, 5, 26)),
         ("剑桥", datetime(2023, 3, 20), datetime(2023, 4, 26)),
         ("汉王", datetime(2023, 1, 7), datetime(2023, 2, 7)),
-        ("麦趣尔", datetime(2022, 12, 21), datetime(2022, 12, 30)),
+        ("麦趣", datetime(2022, 12, 21), datetime(2022, 12, 30)),
         ("格力", datetime(2022, 12, 9), datetime(2022, 12, 19)),
-        ("人人乐", datetime(2022, 12, 6), datetime(2022, 12, 14)),
+        ("人人", datetime(2022, 12, 6), datetime(2022, 12, 14)),
         ("通润", datetime(2022, 11, 16), datetime(2022, 12, 6)),
-        ("安奈儿", datetime(2022, 11, 24), datetime(2022, 12, 7)),
+        ("安奈", datetime(2022, 11, 24), datetime(2022, 12, 7)),
         ("科传", datetime(2022, 11, 22), datetime(2022, 11, 30)),
         ("天鹅", datetime(2022, 10, 31), datetime(2022, 11, 21)),
         ("国脉", datetime(2022, 10, 10), datetime(2022, 10, 19)),
@@ -71,10 +74,10 @@ class Heat(object):
         ("赣能", datetime(2022, 6, 28), datetime(2022, 7, 8)),
         ("传艺", datetime(2022, 6, 23), datetime(2022, 7, 4)),
         ("松芝", datetime(2022, 6, 17), datetime(2022, 7, 29)),
-        ("集泰世宝", datetime(2022, 6, 10), datetime(2022, 6, 28)),
+        ("集泰", datetime(2022, 6, 10), datetime(2022, 6, 28)),
         ("海汽", datetime(2022, 5, 30), datetime(2022, 6, 14)),
         ("华西", datetime(2022, 6, 1), datetime(2022, 6, 10)),
-        ("宝塔特力", datetime(2022, 5, 24), datetime(2022, 6, 2)),
+        ("特力", datetime(2022, 5, 24), datetime(2022, 6, 2)),
         ("中通", datetime(2022, 5, 13), datetime(2022, 5, 31)),
         ("索菱", datetime(2022, 5, 11), datetime(2022, 5, 20)),
         ("新华", datetime(2022, 4, 26), datetime(2022, 5, 13)),
@@ -87,11 +90,11 @@ class Heat(object):
         ("盘龙", datetime(2022, 3, 16), datetime(2022, 3, 28)),
         ("中医", datetime(2022, 3, 2), datetime(2022, 3, 21)),
         ("准油", datetime(2022, 2, 24), datetime(2022, 3, 4)),
-        ("直真美丽", datetime(2022, 2, 18), datetime(2022, 2, 28)),
+        ("美丽", datetime(2022, 2, 18), datetime(2022, 2, 28)),
         ("诚邦", datetime(2022, 2, 14), datetime(2022, 2, 22)),
         ("浙江", datetime(2022, 2, 7), datetime(2022, 2, 21)),
         ("保利", datetime(2022, 1, 26), datetime(2022, 2, 11)),
-        ("得利斯", datetime(2022, 1, 12), datetime(2022, 1, 20)),
+        ("得利", datetime(2022, 1, 12), datetime(2022, 1, 20)),
         ("翠微", datetime(2022, 1, 4), datetime(2022, 1, 20)),
         ("开开", datetime(2021, 12, 31), datetime(2022, 1, 12)),
         ("顾地", datetime(2021, 12, 29), datetime(2022, 1, 7)),
@@ -125,10 +128,10 @@ class Heat(object):
 
         # 设置轴标签和标题
         # ax.set_xlabel('时间', fontsize=22)
-        ax.set_ylabel('温度', fontsize=22)
-        ax.set_title('情绪指数', fontsize=24, )  # 设置标题字体大小为16
+        ax.set_ylabel('温度', fontsize=24)
+        ax.set_title('金岸股侠-超短市场情绪指数', fontsize=28, )  # 设置标题字体大小为16
 
-        ax.tick_params(axis='y', labelsize=16)  # y轴字体大小设置
+        ax.tick_params(axis='y', labelsize=20)  # y轴字体大小设置
         # for yt in ax.get_yticklabels():
         #     val = int(yt.get_text())
         #     yt.set_fontsize(14)
@@ -150,7 +153,7 @@ class Heat(object):
                 elif '14:00' in txt:
                     label.set_horizontalalignment('right')  # 设置水平对齐方式为右对齐
                     x_comment, x_color = self.get_x_comment(txt)
-                    ax.text(label.get_position()[0], label.get_position()[1] + 20, x_comment, fontsize=24,
+                    ax.text(label.get_position()[0], label.get_position()[1] + 20, x_comment, fontsize=26,
                             color=x_color, horizontalalignment='right')  # 添加额外的文字，并调整位置
                 else:
                     label.set_fontsize(12)
@@ -162,13 +165,14 @@ class Heat(object):
         ax.set_xticks(x_ticks)
         ax.set_xticklabels(x_ticklabels)
 
-        plt.xticks(rotation=90)
+        plt.xticks(rotation=70)
 
         # 调整左边距
-        plt.margins(x=0.01)
+        plt.margins(x=0.005)
 
         plt.tight_layout()
-        filename="./data/market-heat-{}-to-{}-{}-{}.png".format(x_data[-1][0:10], x_data[0][:10], self.limit_up_days, self.limit_up_range_days)
+        filename = "./data/market-heat-{}-to-{}-{}-{}.png".format(x_data[-1][0:10], x_data[0][:10], self.limit_up_days,
+                                                                  self.limit_up_range_days)
         plt.savefig(filename)
 
         # 显示图形
@@ -178,7 +182,7 @@ class Heat(object):
         start_time_morning = datetime.strptime("09:30", "%H:%M")
         end_time_morning = datetime.strptime("11:30", "%H:%M")
 
-        start_time_afternoon = datetime.strptime("13:"+str(self.interval).zfill(2), "%H:%M")
+        start_time_afternoon = datetime.strptime("13:" + str(self.interval).zfill(2), "%H:%M")
         end_time_afternoon = datetime.strptime("15:00", "%H:%M")
 
         time_data = []
@@ -205,7 +209,7 @@ class Heat(object):
             if date.day == datetime.now().day:
                 if datetime.strptime(date_str + " " + minute, "%Y-%m-%d %H:%M") > datetime.now():
                     continue
-            if "15:"+str(self.interval).zfill(2) in minute:
+            if "15:" + str(self.interval).zfill(2) in minute:
                 x_value, y_value = date_str + " " + minute, np.nan
             else:
                 x_value, y_value = self.calculate_xy(date, minute)
@@ -229,6 +233,7 @@ class Heat(object):
         )
         klines = query.all()
         sql = query.statement.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True})
+        # print(sql)
         pct_chg = 0
         coef_high = 1
         coef_low = 1
@@ -243,7 +248,6 @@ class Heat(object):
                     coef_low *= (1 - 0.01 * 4)
                 else:
                     coef_low *= (1 - 0.02 * 2)
-
             pct_chg += float(avg)
 
         coef_high = max(coef_high, 0)
@@ -260,7 +264,7 @@ class Heat(object):
 if __name__ == '__main__':
     heat = Heat()
 
-    dates = before_dates(datetime.now(), 23)
+    dates = before_dates(datetime.now(), 20)
     today = dates.pop()
     x_data = []
     y_data = []
@@ -273,12 +277,13 @@ if __name__ == '__main__':
     # 当天数据, 追加
     # heat.interval = 2
     while True:
+        cur_min = int(datetime.now().strftime("%M"))
+        if cur_min % 5 != 0:
+            sleep(1)
+            # continue
         x, y = heat.get_xy_data(today)
         x2, y2 = x_data[:], y_data[:]
         x2.extend(x)
         y2.extend(y)
         heat.draw(x2, y2)
         print("生存成功")
-        time.sleep(20)
-
-

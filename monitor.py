@@ -262,7 +262,7 @@ class Monitor(object):
                     self.say(stock["名称"] + msg)
                     self.set_record_time(record_key)
 
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/buying_code_list.txt")
+        code_list = get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/buying_code_list.txt")
         for code in code_list:
             __scan_buying_data(code)
             time.sleep(0.2)
@@ -328,8 +328,8 @@ class Monitor(object):
     def __scan_up_stock(self, code, down_pct_dff=-2, up_pct_diff=1, min_lots_diff=1000,
                         min_lots=20000, up_pct=7, down_pct=-7):
         try:
-            if not code or len(code)<6 or not code[0].isdigit():
-                print("x")
+            if not code or len(code)<6 or not (code[0].isdigit() or code[2].isdigit()):
+                print("x",code)
                 return
 
             data = self.stock.get_live_data(code)
@@ -506,19 +506,8 @@ class Monitor(object):
             self.last_pct_chg[code] = data["pct_chg"]
             self.set_record_time(record_key)
 
-    def __get_code_list(self, filename):
-        with open(filename, 'r') as f:
-            lines = f.readlines()
-        code_list = []
-        for code in lines:
-            # code = code.replace("SH", "").replace("SZ", "").strip()[:6]
-            code = code.strip()[:8]
-            if code and len(code) >= 8 and code[2].isdigit():
-                code_list.append(code)
-        return list(set(code_list))
-
     def scan_up_stock(self):
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/up_code_list.txt")
+        code_list = get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/up_code_list.txt")
         if len(code_list) > 0:
             pool = ThreadPoolExecutor(min(40, len(code_list)))
             for code in code_list:
@@ -526,7 +515,7 @@ class Monitor(object):
             pool.shutdown()
 
     def scan_bond(self):
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/bond_code_list.txt")
+        code_list = get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/bond_code_list.txt")
         if len(code_list) > 0:
             pool = ThreadPoolExecutor(min(40, len(code_list)))
             for code in code_list:
@@ -534,7 +523,7 @@ class Monitor(object):
             pool.shutdown()
 
     def scan_weight_stock(self):
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/weight_code_list.txt")
+        code_list = get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/weight_code_list.txt")
         if len(code_list) > 0:
             pool = ThreadPoolExecutor(min(40, len(code_list)))
             for code in code_list:
@@ -547,7 +536,7 @@ class Monitor(object):
         results = []
 
         # 读取代码列表并启动线程
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/risk.txt")
+        code_list = get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/risk.txt")
         for code in code_list:
             thread = threading.Thread(target=self.__update_results, args=(code, results))
             thread.start()
@@ -596,7 +585,7 @@ class Monitor(object):
         results = []
 
         # 读取代码列表并启动线程
-        code_list = self.__get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/risk.txt")
+        code_list = get_code_list(os.path.abspath(os.path.dirname(__file__)) + "/conf/risk.txt")
         for code in code_list:
             thread = threading.Thread(target=self.__update_results, args=(code, results))
             thread.start()

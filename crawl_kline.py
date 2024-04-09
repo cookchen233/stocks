@@ -13,7 +13,7 @@ from pytdx.hq import TdxHq_API
 from multiprocessing import Manager, Pool
 import os
 from sqlalchemy import desc, func, cast
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from time import sleep
 
 
@@ -339,12 +339,12 @@ class CrawlKline(object):
         day_volume = 0
         day_amount = 0
         for i, kline in klines.iterrows():
-            if i == 0:
-                continue
             k_time = datetime.strptime(kline["时间"], "%Y-%m-%d %H:%M:%S")
             if k_time.date() != date.date():
                 print(date.date(), code, "k线日期与指定日期不相符", k_time)
                 return []
+            if i == 0 and k_time.strftime("%H:%M") == "09:30":
+                continue
 
             k_open = float(kline["开盘"])
             k_close = float(kline["收盘"])
@@ -448,6 +448,11 @@ if __name__ == '__main__':
 
     elif crawl_type == "live":
         while True:
+            cur_min = int(datetime.now().strftime("%M"))
+            if cur_min % 5 != 0:
+                print("等待")
+                sleep(1)
+                continue
             code_list = get_code_list(os.path.join(os.path.abspath(os.path.dirname(__file__)), "conf/risk.txt"))
             # for code in code_list:
             #     ck.save_live_klines(code)
@@ -466,5 +471,3 @@ if __name__ == '__main__':
             pool.close()
             pool.join()
             print(datetime.now(), "所有任务执行完毕")
-
-            sleep(20)
