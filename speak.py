@@ -1,6 +1,7 @@
 import sys
 import pyttsx3
 
+
 def init_engine():
     engine = pyttsx3.init()
     # 设置语速
@@ -10,9 +11,11 @@ def init_engine():
 
     return engine
 
+
 def say(s):
     engine.say(s)
-    engine.runAndWait() #blocks
+    engine.runAndWait()
+
 
 engine = init_engine()
 say(str(sys.argv[1]))

@@ -1,3 +1,5 @@
+from subprocess import call
+
 from tool import *
 import pandas as pd
 from model.connecter import *
@@ -120,27 +122,24 @@ class Heat(object):
         return result
 
     def draw(self, x_data, y_data):
-
-        # 设置图形的宽度和高度
-        fig, ax = plt.subplots(figsize=(36, 9))  # 12英寸的宽度，6英寸的高度
+        fig, ax = plt.subplots(figsize=(36, 9))  # 设置图形的宽度和高度
 
         ax.plot(x_data, y_data)
 
-        # 设置轴标签和标题
-        # ax.set_xlabel('时间', fontsize=22)
         ax.set_ylabel('温度', fontsize=24)
-        ax.set_title('金岸股侠-超短市场情绪指数', fontsize=28, )  # 设置标题字体大小为16
+        ax.set_title('A股短线交易市场情绪指数', fontsize=28)
 
-        ax.tick_params(axis='y', labelsize=20)  # y轴字体大小设置
+        ax.tick_params(axis='y', labelsize=20)
+        # y轴字体精细化设置
         # for yt in ax.get_yticklabels():
         #     val = int(yt.get_text())
         #     yt.set_fontsize(14)
 
+        # 绘制灰色虚线作为分割线
         for idx, x_val in enumerate(x_data):
             if '15:00' in x_val:
-                ax.axvline(idx, color=(0.8, 0.8, 0.8), linestyle='--')  # 绘制较淡的灰色虚线作为分割线
+                ax.axvline(idx, color=(0.8, 0.8, 0.8), linestyle='--')
 
-        # 仅显示指定条件的刻度
         x_ticks = []
         x_ticklabels = []
         for idx, label in enumerate(ax.get_xticklabels()):
@@ -151,10 +150,10 @@ class Heat(object):
                     label.set_fontsize(22)
                     label.set_text(txt[0:10])
                 elif '14:00' in txt:
-                    label.set_horizontalalignment('right')  # 设置水平对齐方式为右对齐
+                    label.set_horizontalalignment('right')
                     x_comment, x_color = self.get_x_comment(txt)
                     ax.text(label.get_position()[0], label.get_position()[1] + 20, x_comment, fontsize=26,
-                            color=x_color, horizontalalignment='right')  # 添加额外的文字，并调整位置
+                            color=x_color, horizontalalignment='right')
                 else:
                     label.set_fontsize(12)
             else:
@@ -164,19 +163,36 @@ class Heat(object):
 
         ax.set_xticks(x_ticks)
         ax.set_xticklabels(x_ticklabels)
-
+        # x轴刻度文字倾斜角度
         plt.xticks(rotation=70)
-
-        # 调整左边距
+        # x轴刻度与两端的边距
         plt.margins(x=0.005)
-
         plt.tight_layout()
+
+        # 在整个图形上均匀分布水印
+        watermark_text = "济南估下 Watermark"
+        num_watermarks = 6  # 水印总数
+
+        # 定义水印均匀分布的位置
+        positions = [
+            (0.17, 0.7), (0.5, 0.7), (0.83, 0.7),  # 上行
+            (0.17, 0.2), (0.5, 0.2), (0.83, 0.2)  # 下行
+        ]
+        txts = [
+            "金岸股侠",
+            "抖音45722015770",
+        ]
+
+        # 在预设的每个位置放置水印
+        i = 0
+        for pos_x, pos_y in positions:
+            i = 1 if i == 0 else i - 1
+            ax.text(pos_x, pos_y, txts[i], transform=ax.transAxes, fontsize=36, color='gray', rotation=30,
+                    ha='center', va='center', alpha=0.3)
+
         filename = "./data/market-heat-{}-to-{}-{}-{}.png".format(x_data[-1][0:10], x_data[0][:10], self.limit_up_days,
                                                                   self.limit_up_range_days)
         plt.savefig(filename)
-
-        # 显示图形
-        # plt.show()
 
     def generate_interval_minutes(self):
         start_time_morning = datetime.strptime("09:30", "%H:%M")
@@ -277,13 +293,18 @@ if __name__ == '__main__':
     # 当天数据, 追加
     # heat.interval = 2
     while True:
-        cur_min = int(datetime.now().strftime("%M"))
-        if cur_min % 5 != 0:
-            sleep(1)
-            # continue
-        x, y = heat.get_xy_data(today)
-        x2, y2 = x_data[:], y_data[:]
-        x2.extend(x)
-        y2.extend(y)
-        heat.draw(x2, y2)
-        print("生存成功")
+        try:
+            cur_min = int(datetime.now().strftime("%M"))
+            if cur_min % 5 != 0:
+                sleep(1)
+                continue
+            x, y = heat.get_xy_data(today)
+            x2, y2 = x_data[:], y_data[:]
+            x2.extend(x)
+            y2.extend(y)
+            heat.draw(x2, y2)
+            print("生存成功")
+        except Exception as e:
+            err_log()
+            sleep(60)
+            call(["python3", os.path.abspath(os.path.dirname(__file__)) + "/speak.py", "生成绪数指数发生错误"])

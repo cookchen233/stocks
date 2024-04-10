@@ -113,7 +113,7 @@ class Stock(object):
         r = self.session.get(url, params=params, headers=headers)
         data = json.loads(r.text)["data"]
         if not data:
-            print(code)
+            print("get_live_data, 获取数据为空", code)
         turnover = float(data["f168"]) if data["f168"] != "-" else float(data["f168"])
         static_info = self.get_static_info(code)
         if static_info:

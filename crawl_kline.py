@@ -15,6 +15,7 @@ import os
 from sqlalchemy import desc, func, cast
 from datetime import datetime, time, timedelta
 from time import sleep
+from subprocess import call
 
 
 class CrawlKline(object):
@@ -448,26 +449,31 @@ if __name__ == '__main__':
 
     elif crawl_type == "live":
         while True:
-            cur_min = int(datetime.now().strftime("%M"))
-            if cur_min % 5 != 0:
-                print("等待")
-                sleep(1)
-                continue
-            code_list = get_code_list(os.path.join(os.path.abspath(os.path.dirname(__file__)), "conf/risk.txt"))
-            # for code in code_list:
-            #     ck.save_live_klines(code)
-            # 使用 Manager 来创建共享变量
-            manager = Manager()
-            total_tasks = manager.Value("i", len(code_list))
-            tasks_completed = manager.Value("i", 0)
-            lock = manager.Lock()
-            # 创建进程池
-            pool = Pool(processes=5)  # 假设您希望同时执行的最大进程数是 5
-            # 处理每一行
-            for code in code_list:
-                pool.apply_async(process_save_live_klines, args=(code, tasks_completed, total_tasks, lock), error_callback=process_err_callback)
+            try:
+                cur_min = int(datetime.now().strftime("%M"))
+                if cur_min % 5 != 0:
+                    print("等待")
+                    sleep(1)
+                    continue
+                code_list = get_code_list(os.path.join(os.path.abspath(os.path.dirname(__file__)), "conf/risk.txt"))
+                # for code in code_list:
+                #     ck.save_live_klines(code)
+                # 使用 Manager 来创建共享变量
+                manager = Manager()
+                total_tasks = manager.Value("i", len(code_list))
+                tasks_completed = manager.Value("i", 0)
+                lock = manager.Lock()
+                # 创建进程池
+                pool = Pool(processes=5)  # 假设您希望同时执行的最大进程数是 5
+                # 处理每一行
+                for code in code_list:
+                    pool.apply_async(process_save_live_klines, args=(code, tasks_completed, total_tasks, lock), error_callback=process_err_callback)
 
-            # 关闭进程池，等待所有进程完成
-            pool.close()
-            pool.join()
-            print(datetime.now(), "所有任务执行完毕")
+                # 关闭进程池，等待所有进程完成
+                pool.close()
+                pool.join()
+                print(datetime.now(), "所有任务执行完毕")
+            except Exception as e:
+                err_log()
+                sleep(60)
+                call(["python3", os.path.abspath(os.path.dirname(__file__)) + "/speak.py", "抓取情绪数据发生错误"])

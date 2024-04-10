@@ -349,8 +349,11 @@ def get_code_list(filename):
     code_list = []
     for code in lines:
         # code = code.replace("SH", "").replace("SZ", "").strip()[:6]
-        code = code.strip()[:8]
-        if code and len(code) == 8 and code[2:].isdigit():
+        if code[0:2].isdigit() and code[:6].isdigit():
+            code = code.strip()[:6]
+            code_list.append(get_code_market2(code).upper() + code)
+        elif not code[0:2].isdigit() and code[2:6].isdigit():
+            code = code.strip()[:8]
             code_list.append(code)
 
     return list(set(code_list))
