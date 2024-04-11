@@ -299,12 +299,17 @@ class CrawlKline(object):
             print("非交易时间")
             return False
         klines = self.crawl_live_klines(code)
+        if len(klines) == 0:
+            print("抓取数据为空")
+            return False
         self.db.session.add_all(self.filter_klines(code, klines))
         self.db.session.commit()
         return True
 
     def crawl_live_klines(self, code):
         static_info = self.stock.get_static_info(code)
+        if static_info is None:
+            return []
         # 当前数据, 用于获取昨日收盘价
         newest = self.stock.get_live_data(code)
         data_list = []

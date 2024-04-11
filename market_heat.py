@@ -295,10 +295,16 @@ if __name__ == '__main__':
     while True:
         try:
             cur_min = int(datetime.now().strftime("%M"))
-            if cur_min % 5 != 0:
+            if cur_min % 5 != 0 or not heat.stock.right_time("09:30", "11:30") and not heat.stock.right_time("13:00", "15:00"):
+                print("等待")
                 sleep(1)
                 continue
             x, y = heat.get_xy_data(today)
+            if len(x) == 0:
+                print("无当日数据")
+                sleep(1)
+                continue
+
             x2, y2 = x_data[:], y_data[:]
             x2.extend(x)
             y2.extend(y)

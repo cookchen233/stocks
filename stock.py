@@ -156,6 +156,8 @@ class Stock(object):
             self.static_info[code]["流通股"] = unit_to_int(data[0]["流通股"])
             self.static_info[code]["自由流通股"] = unit_to_int(data[0]["自由流通股"])
             return self.static_info[code]
+        else:
+            print("get_static_info, 数据为空", code)
         return None
 
     def right_time(self, begin_time, end_time):
