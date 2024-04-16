@@ -4,7 +4,7 @@ git clone https://github.com/cookchen233/stocks.git
 
 cd stocks
 
-# 监控封单(涨停,跌停), 成交量激增, 高换手
+# 监控封单(涨停,跌停), 成交量激增, 高换手. 将需要监控的股票代码配置到 conf/up_code_list.txt, 每行一个
 python3 monitor.py up 0
 # 非交易时间段(用于调试)
 python3 monitor.py up 1
