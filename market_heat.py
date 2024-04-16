@@ -1,3 +1,4 @@
+import sys
 from subprocess import call
 
 from tool import *
@@ -26,7 +27,8 @@ class Heat(object):
 
     # 龙头周期配置
     leadings = [
-        ("莱绅", datetime(2024, 4, 8), datetime(2024, 4, 21)),
+        ("建设", datetime(2024, 4, 10), datetime(2024, 4, 18)),
+        ("莱绅", datetime(2024, 4, 8), datetime(2024, 4, 12)),
         ("联明", datetime(2024, 4, 3), datetime(2024, 4, 7)),
         ("华生", datetime(2024, 3, 21), datetime(2024, 4, 2)),
         ("宁科", datetime(2024, 3, 20), datetime(2024, 3, 28)),
@@ -279,7 +281,7 @@ class Heat(object):
 
 if __name__ == '__main__':
     heat = Heat()
-
+    # dates = before_dates(datetime.strptime("2024-04-16", "%Y-%m-%d"), 20)
     dates = before_dates(datetime.now(), 20)
     today = dates.pop()
     x_data = []

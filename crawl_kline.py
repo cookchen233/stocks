@@ -205,8 +205,8 @@ class CrawlKline(object):
         return True
 
     def crawl_history_klines(self, date, code):
-        symbol_code = (code[:2] + "." + code[2:]).lower()
-        static_info = self.stock.get_static_info(code)
+        symbol_code = get_code_market2(code) + "." + code
+        static_info = self.stock.get_static_info(get_code_market2(code).upper()+code)
         # print(static_info,static_info["流通股"], static_info["自由流通股"], static_info["股比"])
         # return
 
@@ -397,7 +397,7 @@ def process_save_history_klines(row, dates, tasks_completed, total_tasks, lock):
     print("子进程执行开始", row["名称"])
     try:
         for date in dates:
-            ck.save_history_klines(date, row["代码"])
+            ck.save_history_klines(date, row["代码"].replace(".SH","").replace(".SZ",""))
         with lock:
             tasks_completed.value += 1
             remaining_tasks = total_tasks.value - tasks_completed.value
@@ -424,10 +424,10 @@ if __name__ == '__main__':
 
     if crawl_type == "history":
         script_directory = os.path.dirname(os.path.realpath(__file__))
-        # filename = os.path.join(script_directory, "conf/stock_static_info.xlsx")
-        filename = os.path.join(script_directory, "conf/1.15-4.4.xlsx")
+        filename = os.path.join(script_directory, "conf/stock_static_info.xlsx")
+        # filename = os.path.join(script_directory, "conf/risk.xlsx")
         df = pd.read_excel(filename)
-        dates = range_dates(datetime.strptime("2024-02-10", "%Y-%m-%d"),  datetime.strptime("2024-04-04", "%Y-%m-%d"))
+        dates = range_dates(datetime.strptime("2024-04-15", "%Y-%m-%d"),  datetime.strptime("2024-04-15", "%Y-%m-%d"))
         # for index, row in df.iterrows():
         #     print(row["名称"])
         #     for date in dates:

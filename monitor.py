@@ -349,7 +349,8 @@ class Monitor(object):
             if code not in self.last_volume:
                 self.__set_last_data(code, data)
 
-            limit_up_pct = 0.05 if "st" in name.lower() else (0.1 if code.startswith('60') or code.startswith('90') or code.startswith('00') else 0.2)
+            digit_code = code[:] if code[0].isdigit() else code[2:]
+            limit_up_pct = 0.05 if "st" in name.lower() else (0.1 if digit_code.startswith('60') or digit_code.startswith('90') or digit_code.startswith('00') else 0.2)
 
             # 跌停
             if data["buy1_lots"] == 0 and data["close"] <= round(data["pre_close"]*(1 - limit_up_pct), 2):
@@ -365,8 +366,7 @@ class Monitor(object):
                 # 压单大幅减少
                 record_key = notify_code + ", going_up"
                 lots_diff = self.last_sell1_lots[code] - data["sell1_lots"]
-                if not self.is_recorded(record_key, 2) and ((data["sell1_lots"] < 200000 and lots_diff > min_lots_diff)
-                                                            or data["sell1_lots"] > 500000 and lots_diff > min_lots_diff * 2):
+                if not self.is_recorded(record_key, 2) and (data["sell1_lots"] < 200000 and lots_diff > min_lots_diff):
                     # self.dingding(record_key)
                     lots = self.__format_lots(data["sell1_lots"])
                     lots_diff = self.__format_lots(lots_diff)
@@ -397,14 +397,14 @@ class Monitor(object):
             else:
                 pct_chg_diff = round(data["pct_chg"] - self.last_pct_chg[code], 1)
                 pct_chg = round(data["pct_chg"], 1)
-                # # 快速拉升
-                # if up_pct != 0 and pct_chg >= up_pct and pct_chg_diff > up_pct_diff:
-                #     record_key = notify_code + ", fast_up"
-                #     if not self.is_recorded(record_key, 5):
-                #         self.dingding(record_key)
-                #         self.log(name + f"急拉{pct_chg_diff}")
-                #         self.say(name + f"急拉{pct_chg_diff}")
-                #         self.set_record_time(record_key)
+                # 快速拉升
+                if datetime.now().time() < datetime.strptime("09:40", "%H:%M").time() and pct_chg_diff > up_pct_diff:
+                    record_key = notify_code + ", fast_up"
+                    if not self.is_recorded(record_key, 5):
+                        self.dingding(record_key)
+                        self.log(name + f"急拉{pct_chg_diff}")
+                        self.say(name + f"急拉{pct_chg_diff}")
+                        self.set_record_time(record_key)
                 # # 快速打压
                 # elif pct_chg_diff < down_pct_dff:
                 #     if not self.is_recorded(record_key, 5):
