@@ -187,26 +187,27 @@ class CrawlKline(object):
         return last_day_kline.first()
 
     def save_history_klines(self, date, code):
+        save_code = get_code_market2(code).upper()+code
         ex = self.db.session.query(MinuteKlines).filter(*[
-            MinuteKlines.code == code,
+            MinuteKlines.code == save_code,
             func.date(MinuteKlines.close_time) == date.date()
             ]).order_by(sqlalchemy.asc(MinuteKlines.close_time)) .all()
         if len(ex) > 0:
             if len(ex) == 49 and ex[0].close_time.strftime("%H:%M") == "09:30" and ex[-1].close_time.strftime("%H:%M") == "15:00":
-                print(date, code, "已存在")
+                print(date, save_code, "已存在")
                 return False
             else:
                 pass
-                # raise ValueError(str(date.date()) + " " + code + " 已有数据异常")
-        klines = self.crawl_history_klines(date, code)
+                raise ValueError(str(date.date()) + " " + save_code + " 已有数据异常")
+        klines = self.crawl_history_klines(date, save_code)
         if len(klines) > 0:
-            self.db.session.add_all(self.filter_klines(code, klines))
+            self.db.session.add_all(self.filter_klines(save_code, klines))
             self.db.session.commit()
         return True
 
     def crawl_history_klines(self, date, code):
-        symbol_code = get_code_market2(code) + "." + code
-        static_info = self.stock.get_static_info(get_code_market2(code).upper()+code)
+        symbol_code = code[0:2].lower() + "." + code[2:]
+        static_info = self.stock.get_static_info(code)
         # print(static_info,static_info["流通股"], static_info["自由流通股"], static_info["股比"])
         # return
 
@@ -295,7 +296,7 @@ class CrawlKline(object):
         return data_list
 
     def save_live_klines(self, code):
-        if not self.stock.right_time("09:30", "11:30") and not self.stock.right_time("13:00", "15:00"):
+        if not self.stock.right_time("09:30", "12:00") and not self.stock.right_time("12:00", "15:30"):
             print("非交易时间")
             return False
         klines = self.crawl_live_klines(code)
@@ -394,14 +395,14 @@ def process_err_callback(err):
 
 ck = CrawlKline()
 def process_save_history_klines(row, dates, tasks_completed, total_tasks, lock):
-    print("子进程执行开始", row["名称"])
+    print("子进程执行开始", row["股票简称"])
     try:
         for date in dates:
-            ck.save_history_klines(date, row["代码"].replace(".SH","").replace(".SZ",""))
+            ck.save_history_klines(date, row["股票代码"].replace(".SH","").replace(".SZ",""))
         with lock:
             tasks_completed.value += 1
             remaining_tasks = total_tasks.value - tasks_completed.value
-            print(row["名称"], "完成", f"剩余任务数量: {remaining_tasks}")
+            print(row["股票简称"], "完成", f"剩余任务数量: {remaining_tasks}")
     except Exception as e:
         err_log()
         raise e
@@ -425,9 +426,9 @@ if __name__ == '__main__':
     if crawl_type == "history":
         script_directory = os.path.dirname(os.path.realpath(__file__))
         filename = os.path.join(script_directory, "conf/stock_static_info.xlsx")
-        # filename = os.path.join(script_directory, "conf/risk.xlsx")
+        filename = os.path.join(script_directory, "conf/risk.xlsx")
         df = pd.read_excel(filename)
-        dates = range_dates(datetime.strptime("2024-04-15", "%Y-%m-%d"),  datetime.strptime("2024-04-15", "%Y-%m-%d"))
+        dates = range_dates(datetime.strptime("2024-04-24", "%Y-%m-%d"),  datetime.strptime("2024-04-24", "%Y-%m-%d"))
         # for index, row in df.iterrows():
         #     print(row["名称"])
         #     for date in dates:

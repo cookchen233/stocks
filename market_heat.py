@@ -27,7 +27,10 @@ class Heat(object):
 
     # 龙头周期配置
     leadings = [
-        ("建设", datetime(2024, 4, 10), datetime(2024, 4, 18)),
+        ("川大", datetime(2024, 4, 24), datetime(2024, 4, 29)),
+        ("中衡", datetime(2024, 4, 17), datetime(2024, 4, 25)),
+        ("春光", datetime(2024, 4, 12), datetime(2024, 4, 21)),
+        ("建设", datetime(2024, 4, 10), datetime(2024, 4, 15)),
         ("莱绅", datetime(2024, 4, 8), datetime(2024, 4, 12)),
         ("联明", datetime(2024, 4, 3), datetime(2024, 4, 7)),
         ("华生", datetime(2024, 3, 21), datetime(2024, 4, 2)),
@@ -225,7 +228,7 @@ class Heat(object):
         y_data = []
         for minute in minutes:
             if date.day == datetime.now().day:
-                if datetime.strptime(date_str + " " + minute, "%Y-%m-%d %H:%M") > datetime.now():
+                if datetime.strptime(date_str + " " + minute, "%Y-%m-%d %H:%M") >= datetime.now():
                     continue
             if "15:" + str(self.interval).zfill(2) in minute:
                 x_value, y_value = date_str + " " + minute, np.nan
@@ -297,7 +300,7 @@ if __name__ == '__main__':
     while True:
         try:
             cur_min = int(datetime.now().strftime("%M"))
-            if cur_min % 5 != 0 or not heat.stock.right_time("09:30", "11:30") and not heat.stock.right_time("13:00", "15:00"):
+            if cur_min % 5 != 0 or not heat.stock.right_time("09:30", "12:00") and not heat.stock.right_time("12:00", "15:30"):
                 print("等待")
                 sleep(1)
                 continue
